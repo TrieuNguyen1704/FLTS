@@ -326,14 +326,14 @@ Các mã dưới đây lấy từ User Story v1.1, không phải cột trong Spr
 | Quyết định | Trạng thái/xung đột | Cần nhóm xác nhận trước |
 |---|---|---|
 | ChromaDB local | Sprint 2 workbook ghi cụ thể ChromaDB; master context vẫn ghi vector DB TBD | Chroma là lựa chọn demo Sprint 2 hay quyết định kiến trúc chính thức; pin image/client version |
-| Local embedding model | Workbook ghi local model; exact model vẫn TBD | Model, dimension, license, Vietnamese/English suitability, CPU/RAM, cache/download strategy |
+| Embedding model/provider | **Quyết định 26/09:** OpenAI `text-embedding-3-small`; workbook ghi local model nên thay đổi này phải được nêu rõ khi báo cáo | Default dimension 1536 hay dimension reduction, API key/billing limit, privacy, retry/timeout; không tải local model |
 | PDF parser | TBD | `pypdf` hoặc lựa chọn khác; scope encrypted/scanned PDF; OCR vẫn out of scope |
 | DOCX parser | TBD | `python-docx` hoặc lựa chọn khác; table/heading/source locator policy |
 | Legacy DOC | Spike bắt buộc | LibreOffice vs antiword; image size/fidelity; fallback/error message |
 | Chunking | TBD | Unit, size, overlap, sentence/paragraph fallback, config version |
 | Retrieval | TBD | Similarity metric, top-k default/max, score semantics, filters |
 | Re-ranking PB22 | Có trong Product Backlog nhưng không có task Sprint 2 workbook | Defer chính thức hay thêm scope/cắt task khác; không làm ngầm |
-| LLM/provider | TBD | Provider/model, key/cost/privacy, timeout/retry; chưa thêm SDK trước quyết định |
+| LLM/provider | **Quyết định 26/09:** OpenAI `gpt-4.1-mini` | API key/billing limit, privacy, timeout/retry, output JSON Schema và cách xử lý refusal/lỗi; chưa thêm SDK cho đến PB23 |
 | PB23 definition | Workbook chỉ evidence-only; US-38 yêu cầu LLM + structured output | Prototype-only hay cam kết full US-38 trong Sprint 2 |
 | Internal authentication | Chưa có | Shared service token, network isolation, secret management |
 | Queue | Chưa có | Database queue baseline, tries/backoff/timeout và failed-job handling |
