@@ -69,6 +69,7 @@ Không có dòng nào ở trên là bằng chứng cho RAG, extract PDF/DOC/DOCX
 - `backend/tests/Feature/SprintOneApiTest.php` — mở rộng coverage cho registration, reset, account management, update/search/document authorization.
 - `README.md`, `docs/DEMO_2026-09-28.md`, `docs/CODEBASE_GUIDE_VI.md`, `docs/DEVELOPMENT.md`, `docs/SPRINT_2_EXECUTION_PLAN.md`, `PROJECT_CONTEXT.md` — đồng bộ cách chạy, scope và điểm handoff.
 - `.gitignore` — bỏ qua file lock tạm `~$*.xlsx` của Excel, không xóa file Excel người dùng đang mở.
+- `frontend/src/assets/main.css`, `frontend/src/components/AppSidebar.vue` — closeout visual fix: bảng Account Management thu gọn ở laptop hẹp, text banner được phép xuống dòng và icon sidebar dùng CSS thay vì ký tự bị lỗi encoding trên Windows.
 
 ## 5. Handoff bắt đầu Sprint 2
 
