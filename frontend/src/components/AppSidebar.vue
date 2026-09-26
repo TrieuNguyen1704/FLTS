@@ -3,12 +3,12 @@ import { computed } from 'vue'
 import { authStore } from '../stores/auth'
 
 const navigation = computed(() => {
-  if (authStore.role.value === 'student') return [{ label: 'My learning', icon: '◈', to: { name: 'student-dashboard' } }]
+  if (authStore.role.value === 'student') return [{ label: 'My learning', icon: 'learning', to: { name: 'student-dashboard' } }]
   if (authStore.role.value === 'lecturer') return [
-      { label: 'Overview', icon: '◈', to: { name: 'lecturer-dashboard' } },
-      { label: 'Course management', icon: '▣', to: { name: 'course-management' } },
-    ]
-  if (authStore.role.value === 'admin') return [{ label: 'Account management', icon: 'â—†', to: { name: 'admin-dashboard' } }]
+    { label: 'Overview', icon: 'overview', to: { name: 'lecturer-dashboard' } },
+    { label: 'Course management', icon: 'courses', to: { name: 'course-management' } },
+  ]
+  if (authStore.role.value === 'admin') return [{ label: 'Account management', icon: 'accounts', to: { name: 'admin-dashboard' } }]
   return []
 })
 </script>
@@ -21,7 +21,8 @@ const navigation = computed(() => {
     <p class="sidebar__caption">SPRINT 1 DEMO</p>
     <nav class="sidebar__nav" aria-label="Primary navigation">
       <RouterLink v-for="item in navigation" :key="item.label" :to="item.to" class="sidebar__link">
-        <span>{{ item.icon }}</span>{{ item.label }}
+        <!-- CSS icons avoid mojibake when the app is opened under a different Windows encoding. -->
+        <span :class="['sidebar__icon', `sidebar__icon--${item.icon}`]" aria-hidden="true" />{{ item.label }}
       </RouterLink>
     </nav>
     <div class="sidebar__note"><strong>Scope note</strong><span>Document storage only. Processing and RAG are not implemented.</span></div>
