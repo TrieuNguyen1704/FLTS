@@ -15,7 +15,12 @@ class DocumentController
     public function index(Request $request, Course $course): JsonResponse
     {
         $this->ensureOwner($request, $course);
-        return response()->json(['documents' => $course->documents()->latest()->get()]);
+        $data = $request->validate(['q' => ['nullable', 'string', 'max:120']]);
+        $query = trim((string) ($data['q'] ?? ''));
+        return response()->json(['documents' => $course->documents()
+            ->when($query !== '', fn ($documents) => $documents->where('original_name', 'like', "%{$query}%"))
+            ->latest()
+            ->get()]);
     }
 
     public function store(Request $request, Course $course): JsonResponse

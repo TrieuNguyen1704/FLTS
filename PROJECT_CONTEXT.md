@@ -1086,3 +1086,16 @@ FLTS is not 'an AI that replaces lecturers'. It is a document-grounded learning-
 - An OpenAI Platform API key and billing/usage limit are required; a ChatGPT subscription is not treated as an API credential. The key must exist only in each developer's ignored local `.env`, never in Git, source code, screenshots, or documentation.
 - ChromaDB remains a separate unresolved decision: the Sprint 2 workbook names local ChromaDB, while the master context historically marked the vector database TBD. Confirm it explicitly before PB20 and pin its image/client version.
 - This decision does not authorize adding an LLM SDK or cloud credentials before the relevant PB is started through the normal branch/PR process.
+
+## 27. Sprint 1 Closeout Implementation Update — 2026-09-26
+
+This is a repository-verified implementation update, not an assertion that every planned hour, reviewer action, or Sprint workbook `Actual` entry has been completed.
+
+- Branch `feature/sprint1-closeout` contains the closeout implementation. The GitHub main branch, remote CI and a PR-based ruleset had already been verified separately; the new `backend-quality` CI job still needs one remote PR run before it can be selected as a required GitHub status check.
+- Compose now includes local Mailpit (`http://localhost:8025`) for the demo password-reset email flow. API and AI health checks returned `ok`; `api`, `ai`, `web`, `mysql`, and `mailpit` were observed running/healthy after `docker compose up --build -d`.
+- Registration UI/API validation, reset-token email/reset flow, Admin account list/role/status management, Lecturer course update, document search, and document download UI/service were implemented without changing the existing course/document API ownership model.
+- New database migrations add `users.account_status` and `password_reset_tokens`. Account suspension is enforced by both login and token middleware; it revokes an existing token. The reset token is stored hashed, expires in one hour, and is deleted after successful use.
+- Docker PHPUnit execution passed **7 tests and 49 assertions**. Browser verification logged successful Lecturer, Administrator, and Student login/route outcomes. A Mailpit API check observed one reset email after a real local reset request. `frontend` production build and PHP syntax checks also passed in this working session.
+- PB13/US-13 must remain **partial**: metadata and accurate `uploaded_pending_processing` display exist, but no extractor/worker/pipeline can transition status or persist a processing error. Those missing acceptance criteria are explicit Sprint 2 PB13 carry-over, not a completed RAG claim.
+- The local Excel lock file pattern `docs/reference/~$*.xlsx` is ignored. No source Word/Excel plan was edited and no `Actual` time was filled.
+- The canonical current handoff/status document is `docs/SPRINT_1_CLOSEOUT_STATUS.md`.

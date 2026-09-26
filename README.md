@@ -4,10 +4,12 @@
 
 Xem [hướng dẫn đọc toàn bộ codebase bằng tiếng Việt](docs/CODEBASE_GUIDE_VI.md) để phân biệt code framework/dependency với code Sprint 1, và để lần theo các luồng login, phân quyền, course và upload.
 
+Trạng thái closeout có bằng chứng thực tế, giới hạn còn lại và điểm bắt đầu Sprint 2: [docs/SPRINT_1_CLOSEOUT_STATUS.md](docs/SPRINT_1_CLOSEOUT_STATUS.md).
+
 ## Yêu cầu
 
 - Windows 10/11 với Docker Desktop đang chạy và Docker Compose v2.
-- Cổng `8080`, `8000`, `8001`, `3306` còn trống (có thể đổi bằng `.env`).
+- Cổng `8080`, `8000`, `8001`, `8025`, `3306` còn trống (có thể đổi bằng `.env`).
 
 ## Chạy demo
 
@@ -17,7 +19,7 @@ docker compose up --build -d
 docker compose ps
 ```
 
-Chờ trạng thái `api`, `ai`, `web`, `mysql` là running, rồi mở `http://localhost:8080`.
+Chờ trạng thái `api`, `ai`, `web`, `mysql`, `mailpit` là running/healthy, rồi mở `http://localhost:8080`. Mailpit chỉ dùng cho email reset mật khẩu khi demo local tại `http://localhost:8025`.
 
 Tài khoản seed:
 
@@ -28,6 +30,14 @@ Tài khoản seed:
 | Administrator | `admin@flts.test` | `DemoPass123!` |
 
 Khóa học `FLIP-101` đã được cấp quyền cho `student@flts.test`.
+
+## Bổ sung Sprint 1 đã kiểm chứng (26/09/2026)
+
+- Người dùng có thể tự đăng ký **Lecturer** hoặc **Student**; Admin được seed hoặc được Admin khác gán role, không thể tự đăng ký role Admin.
+- Password recovery tạo token một lần, hết hạn sau một giờ. Với Docker local, email được xem trong Mailpit, không gửi ra Internet.
+- Admin có Account Management để tìm danh sách, đổi role/status của tài khoản khác. Suspend thu hồi token đang hoạt động; Admin không thể tự hạ role/tự suspend.
+- Lecturer có thể sửa course, tìm kiếm document theo tên và tải xuống document của course mình sở hữu.
+- `uploaded_pending_processing` vẫn chỉ có nghĩa file đã lưu; không có extraction, error state thật, embedding, vector DB hay RAG.
 
 ## API và kiểm tra nhanh
 

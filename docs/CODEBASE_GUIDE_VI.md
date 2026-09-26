@@ -176,3 +176,20 @@ Các status DB tương lai và service FastAPI không phải bằng chứng các
 - Bất kỳ endpoint mới nào cũng cần backend authorization và test độc lập; Vue guard không thay thế authorization.
 - Nếu thêm extraction/RAG, cần chọn có chủ đích queue/worker, file scanning, model/provider, embedding/vector DB, retry/error state và quyền Student trước khi đổi status document.
 - Cập nhật `README.md`, `PROJECT_CONTEXT.md`, demo script và tests cùng với thay đổi behavior; không điền trạng thái hoàn thành chỉ vì đã có UI hoặc enum schema.
+
+## 12. Cập nhật Sprint 1 — 26/09/2026
+
+Các mục dưới đây là phần source có thật được bổ sung sau bản hướng dẫn ban đầu:
+
+| Luồng | Frontend | Laravel | Dữ liệu / hạ tầng |
+|---|---|---|---|
+| Đăng ký | `views/RegisterView.vue`, `services/authService.js#register` | `POST /api/auth/register`, `AuthController@register` | Bảng `users`; chỉ cho role Lecturer/Student. |
+| Quên/đặt lại mật khẩu | `PasswordRecoveryView.vue` | `AuthController@requestPasswordReset`, `resetPassword`, `PasswordResetMail` | `password_reset_tokens`: chỉ hash token, `expires_at`; Mailpit Docker nhận mail local. |
+| Quản trị tài khoản | `AdminDashboardView.vue`, `adminService.js` | `AdminUserController@index/update`, `role:admin` | `users.account_status`; suspend xóa bearer token đang dùng. |
+| Sửa/tìm/tải document | `CourseDetailView.vue`, `courseService.js`, `documentService.js` | `CourseController@update`, `DocumentController@index/download` | Không đổi schema document; query và download vẫn bắt buộc ownership. |
+
+Luồng token reset cần hiểu theo thứ tự: request hợp lệ luôn trả thông điệp chung để không lộ account; nếu user active tồn tại, server sinh raw token, chỉ lưu SHA-256 hash, gửi raw token qua Mailpit, rồi `resetPassword` kiểm tra hash + hạn dùng và xóa record trong transaction. Vì vậy token không dùng lại được.
+
+`account_status` không chỉ là nút UI: `AuthenticateToken` từ chối và xóa token của user suspended; `AuthController@login` cũng trả 403. Admin không thể tự đổi role/status của mình và không thể bỏ/suspend Admin active cuối cùng.
+
+Tình trạng document vẫn phải trình bày chính xác: file được lưu và metadata/list/search/download hoạt động, nhưng `uploaded_pending_processing` không phải state machine hay kết quả pipeline. Extraction/error/retry/RAG thuộc Sprint 2.

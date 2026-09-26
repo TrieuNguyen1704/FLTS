@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\AdminUserController;
 use App\Http\Controllers\CourseController;
 use App\Http\Controllers\DocumentController;
 use Illuminate\Support\Facades\Route;
@@ -8,11 +9,15 @@ use Illuminate\Support\Facades\Route;
 Route::get('/health', fn () => response()->json(['status' => 'ok', 'service' => 'laravel-api']));
 Route::post('/auth/register', [AuthController::class, 'register']);
 Route::post('/auth/login', [AuthController::class, 'login']);
+Route::post('/auth/password-reset/request', [AuthController::class, 'requestPasswordReset']);
+Route::post('/auth/password-reset', [AuthController::class, 'resetPassword']);
 
 // Every product route below resolves the bearer token before a controller can trust $request->user().
 Route::middleware('auth.token')->group(function () {
     Route::get('/auth/me', [AuthController::class, 'me']);
     Route::post('/auth/logout', [AuthController::class, 'logout']);
+    Route::get('/admin/users', [AdminUserController::class, 'index'])->middleware('role:admin');
+    Route::patch('/admin/users/{user}', [AdminUserController::class, 'update'])->middleware('role:admin');
     Route::get('/courses', [CourseController::class, 'index']);
     Route::get('/courses/{course}', [CourseController::class, 'show']);
     Route::post('/courses', [CourseController::class, 'store'])->middleware('role:lecturer');
