@@ -32,11 +32,15 @@ services:
       DB_PASSWORD: ${MYSQL_PASSWORD:-flts_secret}
       DOCUMENT_MAX_KB: ${DOCUMENT_MAX_KB:-10240}
       FRONTEND_URL: http://localhost:${APP_PORT:-8080}
-      MAIL_MAILER: smtp
-      MAIL_HOST: mailpit
-      MAIL_PORT: 1025
-      MAIL_FROM_ADDRESS: noreply@flts.test
-      MAIL_FROM_NAME: FLTS
+      MAIL_MAILER: ${MAIL_MAILER:-smtp}
+      MAIL_HOST: ${MAIL_HOST:-mailpit}
+      MAIL_PORT: ${MAIL_PORT:-1025}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_ENCRYPTION: ${MAIL_ENCRYPTION:-}
+      MAIL_SCHEME: ${MAIL_SCHEME:-}
+      MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-noreply@flts.test}
+      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-FLTS}
     ports:
       - "${API_PORT:-8000}:8000"
     depends_on:

@@ -4,11 +4,13 @@ namespace App\Http\Controllers;
 
 use App\Models\User;
 use App\Mail\PasswordResetMail;
+use App\Mail\WelcomeMail;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 
@@ -29,6 +31,12 @@ class AuthController
             'password' => Hash::make($data['password']),
             'role' => $data['role'],
         ]);
+
+        try {
+            Mail::to($user->email)->send(new WelcomeMail($user));
+        } catch (\Throwable $e) {
+            Log::warning('Failed to send welcome email: ' . $e->getMessage());
+        }
 
         return response()->json(['user' => $user], 201);
     }

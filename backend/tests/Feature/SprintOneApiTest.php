@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Course;
 use App\Models\User;
 use App\Mail\PasswordResetMail;
+use App\Mail\WelcomeMail;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -18,12 +19,18 @@ class SprintOneApiTest extends TestCase
 
     public function test_registration_creates_a_lecturer_or_student_and_rejects_invalid_input(): void
     {
+        Mail::fake();
+
         $this->postJson('/api/auth/register', [
             'name' => 'New Student', 'email' => 'new@student.test', 'role' => 'student',
             'password' => 'Password123!', 'password_confirmation' => 'Password123!',
         ])->assertCreated()->assertJsonPath('user.email', 'new@student.test')->assertJsonPath('user.role', 'student');
 
         $this->assertDatabaseHas('users', ['email' => 'new@student.test', 'role' => 'student', 'account_status' => 'active']);
+        Mail::assertSent(WelcomeMail::class, function (WelcomeMail $mail) {
+            return $mail->hasTo('new@student.test');
+        });
+
         $this->postJson('/api/auth/register', [
             'name' => '', 'email' => 'not-an-email', 'role' => 'admin', 'password' => 'short', 'password_confirmation' => 'different',
         ])->assertUnprocessable()->assertJsonValidationErrors(['name', 'email', 'role', 'password']);
