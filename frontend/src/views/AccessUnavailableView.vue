@@ -5,7 +5,18 @@ import BaseButton from '../components/BaseButton.vue'
 import { authStore } from '../stores/auth'
 
 const router = useRouter()
-async function signOut() { await authStore.logout(); router.push({ name: 'login' }) }
+async function signOut() {
+  await authStore.logout()
+  router.push({ name: 'login' })
+}
 </script>
 
-<template><AppState type="empty" title="No workspace is available for this role" message="Administrator account data exists in Sprint 1, but an administrator management workspace has not been implemented. This screen does not represent a completed user story." action-label="Sign out" @action="signOut" /></template>
+<template>
+  <AppState
+    type="empty"
+    title="Không có quyền truy cập"
+    message="Tài khoản của bạn hiện không có quyền truy cập vào không gian làm việc này."
+    action-label="Đăng xuất"
+    @action="signOut"
+  />
+</template>

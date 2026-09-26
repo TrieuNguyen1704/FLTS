@@ -15,12 +15,17 @@ const error = ref('')
 const recentCourses = computed(() => courses.value.slice(0, 3))
 
 async function loadDashboard() {
-  loading.value = true; error.value = ''
+  loading.value = true
+  error.value = ''
   try {
     courses.value = (await courseService.list()).courses
     const documents = await Promise.all(courses.value.map((course) => documentService.list(course.id)))
     documentCount.value = documents.reduce((total, result) => total + result.documents.length, 0)
-  } catch (requestError) { error.value = requestError.message } finally { loading.value = false }
+  } catch (requestError) {
+    error.value = requestError.message || 'Không thể tải dữ liệu bảng điều khiển.'
+  } finally {
+    loading.value = false
+  }
 }
 
 onMounted(loadDashboard)
@@ -28,21 +33,68 @@ onMounted(loadDashboard)
 
 <template>
   <section class="page-heading">
-    <div><p class="eyebrow">LECTURER WORKSPACE</p><h1>Good to see you.</h1><p>Keep your courses and source documents organised for the next learning workflow.</p></div>
-    <BaseButton @click="router.push({ name: 'course-management' })">Create course</BaseButton>
+    <div>
+      <p class="eyebrow">KHÔNG GIAN GIẢNG VIÊN</p>
+      <h1>Xin chào, chúc một ngày giảng dạy hiệu quả.</h1>
+      <p>Quản lý các khóa học và tài liệu nguồn phục vụ cho mô hình học tập đảo ngược (Flipped Learning).</p>
+    </div>
+    <BaseButton @click="router.push({ name: 'course-management' })">Tạo khóa học</BaseButton>
   </section>
-  <section class="notice-banner"><strong>Sprint 1 scope</strong><span>Uploads are safely stored with metadata and remain <b>Pending processing</b>. No extraction, embedding, vector storage, or RAG is running.</span></section>
-  <section v-if="loading" class="summary-grid"><div v-for="index in 3" :key="index" class="summary-card skeleton" /></section>
+  <section class="notice-banner">
+    <strong>Thông báo hệ thống</strong>
+    <span>Tài liệu giảng dạy tải lên được lưu trữ an toàn và sẵn sàng cho các quy trình tạo lập học liệu thông minh.</span>
+  </section>
+  <section v-if="loading" class="summary-grid">
+    <div v-for="index in 3" :key="index" class="summary-card skeleton" />
+  </section>
   <template v-else-if="!error">
     <section class="summary-grid">
-      <article class="summary-card"><span class="summary-card__label">My courses</span><strong>{{ courses.length }}</strong><small>Courses you own</small></article>
-      <article class="summary-card"><span class="summary-card__label">Document uploads</span><strong>{{ documentCount }}</strong><small>Stored teaching documents</small></article>
-      <article class="summary-card"><span class="summary-card__label">Processing</span><strong>0</strong><small>No processing worker in Sprint 1</small></article>
+      <article class="summary-card">
+        <span class="summary-card__label">Khóa học của tôi</span>
+        <strong>{{ courses.length }}</strong>
+        <small>Khóa học bạn phụ trách</small>
+      </article>
+      <article class="summary-card">
+        <span class="summary-card__label">Tài liệu đã tải lên</span>
+        <strong>{{ documentCount }}</strong>
+        <small>Tài liệu giảng dạy đã lưu</small>
+      </article>
+      <article class="summary-card">
+        <span class="summary-card__label">Học liệu sẵn sàng</span>
+        <strong>{{ courses.length ? documentCount : 0 }}</strong>
+        <small>Học liệu trong hệ thống</small>
+      </article>
     </section>
-    <section class="content-section"><header class="section-header"><div><h2>Recent courses</h2><p>Open a course to manage its source documents.</p></div><RouterLink :to="{ name: 'course-management' }">View all courses</RouterLink></header>
-      <div v-if="recentCourses.length" class="course-grid"><CourseCard v-for="course in recentCourses" :key="course.id" :course="course"><RouterLink class="inline-link" :to="{ name: 'course-detail', params: { id: course.id } }">Open course →</RouterLink></CourseCard></div>
-      <AppState v-else title="No courses yet" message="Create your first course to start storing teaching documents." action-label="Create course" @action="router.push({ name: 'course-management' })" />
+    <section class="content-section">
+      <header class="section-header">
+        <div>
+          <h2>Khóa học gần đây</h2>
+          <p>Mở khóa học để quản lý học liệu và tài liệu nguồn.</p>
+        </div>
+        <RouterLink :to="{ name: 'course-management' }">Xem tất cả khóa học →</RouterLink>
+      </header>
+      <div v-if="recentCourses.length" class="course-grid">
+        <CourseCard v-for="course in recentCourses" :key="course.id" :course="course">
+          <RouterLink class="inline-link" :to="{ name: 'course-detail', params: { id: course.id } }">
+            Mở khóa học →
+          </RouterLink>
+        </CourseCard>
+      </div>
+      <AppState
+        v-else
+        title="Chưa có khóa học nào"
+        message="Hãy tạo khóa học đầu tiên để bắt đầu lưu trữ tài liệu giảng dạy."
+        action-label="Tạo khóa học"
+        @action="router.push({ name: 'course-management' })"
+      />
     </section>
   </template>
-  <AppState v-else type="error" title="Unable to load the dashboard" :message="error" action-label="Try again" @action="loadDashboard" />
+  <AppState
+    v-else
+    type="error"
+    title="Không thể tải bảng điều khiển"
+    :message="error"
+    action-label="Thử lại"
+    @action="loadDashboard"
+  />
 </template>
