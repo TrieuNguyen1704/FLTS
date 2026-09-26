@@ -16,30 +16,123 @@ const saving = ref(false)
 const form = reactive({ role: '', account_status: '' })
 
 async function loadUsers() {
-  loading.value = true; error.value = ''
-  try { users.value = (await adminService.listUsers(query.value.trim())).users } catch (requestError) { error.value = requestError.message } finally { loading.value = false }
+  loading.value = true
+  error.value = ''
+  try {
+    users.value = (await adminService.listUsers(query.value.trim())).users
+  } catch (requestError) {
+    error.value = requestError.message || 'Không thể tải danh sách tài khoản.'
+  } finally {
+    loading.value = false
+  }
 }
-function openEdit(user) { selectedUser.value = user; form.role = user.role; form.account_status = user.account_status }
+
+function openEdit(user) {
+  selectedUser.value = user
+  form.role = user.role
+  form.account_status = user.account_status
+}
+
 async function saveUser() {
   if (!selectedUser.value) return
   saving.value = true
   try {
-    const { user } = await adminService.updateUser(selectedUser.value.id, { role: form.role, account_status: form.account_status })
+    const { user } = await adminService.updateUser(selectedUser.value.id, {
+      role: form.role,
+      account_status: form.account_status
+    })
     users.value = users.value.map((item) => item.id === user.id ? user : item)
     selectedUser.value = null
-    toast.show('Account updated.')
-  } catch (requestError) { toast.show(requestError.message, 'error') } finally { saving.value = false }
+    toast.show('Cập nhật tài khoản thành công.')
+  } catch (requestError) {
+    toast.show(requestError.message || 'Không thể cập nhật tài khoản.', 'error')
+  } finally {
+    saving.value = false
+  }
 }
+
+function roleLabel(role) {
+  if (role === 'admin') return 'Quản trị viên'
+  if (role === 'lecturer') return 'Giảng viên'
+  if (role === 'student') return 'Sinh viên'
+  return role
+}
+
+function statusLabel(status) {
+  return status === 'active' ? 'Hoạt động' : 'Tạm khóa'
+}
+
 onMounted(loadUsers)
 </script>
 
 <template>
-  <section class="page-heading"><div><p class="eyebrow">ADMINISTRATOR WORKSPACE</p><h1>Account management</h1><p>View registered accounts and update roles or access status. Changes are enforced by the Laravel API.</p></div></section>
-  <section class="notice-banner"><strong>Access control</strong><span>Suspending an account immediately revokes its active demo token. You cannot change your own Administrator role or status.</span></section>
-  <form class="toolbar" @submit.prevent="loadUsers"><input v-model="query" placeholder="Search by name or email" aria-label="Search accounts" /><BaseButton type="submit" variant="secondary">Search</BaseButton></form>
-  <AppState v-if="loading" type="loading" title="Loading accounts" message="Retrieving accounts from the protected Admin API." />
-  <AppState v-else-if="error" type="error" title="Unable to load accounts" :message="error" action-label="Try again" @action="loadUsers" />
-  <div v-else-if="users.length" class="document-table-wrap"><table class="document-table admin-table"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Created</th><th /></tr></thead><tbody><tr v-for="user in users" :key="user.id"><td><strong>{{ user.name }}</strong></td><td>{{ user.email }}</td><td><span class="role-chip">{{ user.role }}</span></td><td><span :class="['status-chip', `status-chip--${user.account_status}`]">{{ user.account_status }}</span></td><td>{{ new Date(user.created_at).toLocaleDateString() }}</td><td><BaseButton v-if="user.id !== authStore.user.value?.id" variant="secondary" @click="openEdit(user)">Manage</BaseButton><span v-else class="muted">Current account</span></td></tr></tbody></table></div>
-  <AppState v-else title="No accounts found" message="Try a different name or email search." />
-  <AppModal v-model="selectedUser" title="Manage account" confirm-label="Save changes" :loading="saving" @confirm="saveUser"><p class="muted">{{ selectedUser?.email }}</p><label class="field"><span class="field__label">Role</span><select v-model="form.role"><option value="lecturer">Lecturer</option><option value="student">Student</option><option value="admin">Administrator</option></select></label><label class="field"><span class="field__label">Account status</span><select v-model="form.account_status"><option value="active">Active</option><option value="suspended">Suspended</option></select></label></AppModal>
+  <section class="page-heading">
+    <div>
+      <p class="eyebrow">KHÔNG GIAN QUẢN TRỊ VIÊN</p>
+      <h1>Quản lý tài khoản</h1>
+      <p>Xem danh sách tài khoản đã đăng ký, phân quyền vai trò và quản lý trạng thái truy cập.</p>
+    </div>
+  </section>
+  <section class="notice-banner">
+    <strong>Kiểm soát quyền truy cập</strong>
+    <span>Khóa tài khoản (Tạm khóa) sẽ ngay lập tức thu hồi phiên đăng nhập hiện tại của người dùng. Bạn không thể tự thay đổi vai trò hoặc trạng thái của chính mình.</span>
+  </section>
+  <form class="toolbar" @submit.prevent="loadUsers">
+    <input v-model="query" placeholder="Tìm kiếm theo tên hoặc email..." aria-label="Tìm kiếm tài khoản" />
+    <BaseButton type="submit" variant="secondary">Tìm kiếm</BaseButton>
+  </form>
+  <AppState v-if="loading" type="loading" title="Đang tải danh sách tài khoản" message="Đang lấy dữ liệu từ hệ thống quản trị." />
+  <AppState v-else-if="error" type="error" title="Không thể tải danh sách tài khoản" :message="error" action-label="Thử lại" @action="loadUsers" />
+  <div v-else-if="users.length" class="document-table-wrap">
+    <table class="document-table admin-table">
+      <thead>
+        <tr>
+          <th>Họ và tên</th>
+          <th>Địa chỉ Email</th>
+          <th>Vai trò</th>
+          <th>Trạng thái</th>
+          <th>Ngày tạo</th>
+          <th aria-label="Thao tác" />
+        </tr>
+      </thead>
+      <tbody>
+        <tr v-for="user in users" :key="user.id">
+          <td><strong>{{ user.name }}</strong></td>
+          <td>{{ user.email }}</td>
+          <td><span class="role-chip">{{ roleLabel(user.role) }}</span></td>
+          <td><span :class="['status-chip', `status-chip--${user.account_status}`]">{{ statusLabel(user.account_status) }}</span></td>
+          <td>{{ new Date(user.created_at).toLocaleDateString('vi-VN') }}</td>
+          <td>
+            <BaseButton v-if="user.id !== authStore.user.value?.id" variant="secondary" @click="openEdit(user)">Quản lý</BaseButton>
+            <span v-else class="muted">Tài khoản hiện tại</span>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <AppState v-else title="Không tìm thấy tài khoản nào" message="Thử tìm kiếm với tên hoặc email khác." />
+  <AppModal
+    v-model="selectedUser"
+    title="Cập nhật tài khoản"
+    confirm-label="Lưu thay đổi"
+    :loading="saving"
+    @confirm="saveUser"
+  >
+    <p class="muted">{{ selectedUser?.email }}</p>
+    <label class="field">
+      <span class="field__label">Vai trò</span>
+      <select v-model="form.role">
+        <option value="lecturer">Giảng viên (Lecturer)</option>
+        <option value="student">Sinh viên (Student)</option>
+        <option value="admin">Quản trị viên (Administrator)</option>
+      </select>
+    </label>
+    <label class="field">
+      <span class="field__label">Trạng thái tài khoản</span>
+      <select v-model="form.account_status">
+        <option value="active">Hoạt động (Active)</option>
+        <option value="suspended">Tạm khóa (Suspended)</option>
+      </select>
+    </label>
+  </AppModal>
 </template>

@@ -25,8 +25,8 @@ export async function apiRequest(path, options = {}) {
 
   if (!response.ok) {
     const fallbackMessage = response.status === 413
-      ? 'The selected file exceeds the 10 MB upload limit.'
-      : `Request failed (${response.status})`
+      ? 'Tệp tin đã chọn vượt quá giới hạn tải lên tối đa 10 MB.'
+      : `Yêu cầu thất bại (${response.status})`
     throw new ApiError(data.message || fallbackMessage, response.status, data.errors || {})
   }
 
@@ -41,7 +41,7 @@ export async function apiDownload(path, fallbackFilename) {
 
   if (!response.ok) {
     const data = await response.json().catch(() => ({}))
-    throw new ApiError(data.message || `Download failed (${response.status})`, response.status, data.errors || {})
+    throw new ApiError(data.message || `Tải xuống thất bại (${response.status})`, response.status, data.errors || {})
   }
 
   const blob = await response.blob()
