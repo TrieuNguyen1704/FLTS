@@ -1,7 +1,7 @@
-import { apiRequest } from './api'
+import { apiDownload, apiRequest } from './api'
 
 export const documentService = {
-  list: (courseId) => apiRequest(`/courses/${courseId}/documents`),
+  list: (courseId, query = '') => apiRequest(`/courses/${courseId}/documents${query ? `?q=${encodeURIComponent(query)}` : ''}`),
   upload: (courseId, file) => {
     const formData = new FormData()
     // The key must match Laravel's `document` validation rule; changing only UI text would not be enough.
@@ -9,4 +9,5 @@ export const documentService = {
     return apiRequest(`/courses/${courseId}/documents`, { method: 'POST', body: formData })
   },
   remove: (courseId, documentId) => apiRequest(`/courses/${courseId}/documents/${documentId}`, { method: 'DELETE' }),
+  download: (courseId, document) => apiDownload(`/courses/${courseId}/documents/${document.id}/download`, document.original_name),
 }

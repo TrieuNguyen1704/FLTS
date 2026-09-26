@@ -12,7 +12,7 @@ class User extends Model
 
     public const ROLES = ['admin', 'lecturer', 'student'];
 
-    protected $fillable = ['name', 'email', 'password', 'role', 'api_token_hash'];
+    protected $fillable = ['name', 'email', 'password', 'role', 'account_status', 'api_token_hash'];
 
     protected $hidden = ['password', 'api_token_hash'];
 

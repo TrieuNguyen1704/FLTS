@@ -5,7 +5,7 @@
 - `main` là nhánh tích hợp có thể demo; không push trực tiếp khi repository đã có remote chung.
 - Tạo nhánh ngắn theo dạng `feature/<pb>-<mô-tả>` hoặc `fix/<mô-tả>`; ví dụ `feature/pb12-document-upload`.
 - Mỗi pull request ghi PB/US liên quan, cách chạy/test, thay đổi migration/API và giới hạn còn lại.
-- Ít nhất một thành viên khác review trước khi merge vào `main`. Branch protection và quyền repository phải được nhóm cấu hình trên hosting sau khi có remote; repository local không thể tự xác minh điều này.
+- PR và CI pass là điều kiện merge vào `main`. Review bởi một thành viên khác vẫn được khuyến nghị khi có người cùng quyền Write; ruleset hiện tại không bắt buộc approval để Scrum Master có thể merge sau khi các checks pass. Branch protection cần được nhóm kiểm tra lại trên GitHub khi thay đổi quyền/kế hoạch repository.
 
 ## Quy ước code
 

@@ -31,11 +31,19 @@ services:
       DB_USERNAME: ${MYSQL_USER:-flts}
       DB_PASSWORD: ${MYSQL_PASSWORD:-flts_secret}
       DOCUMENT_MAX_KB: ${DOCUMENT_MAX_KB:-10240}
+      FRONTEND_URL: http://localhost:${APP_PORT:-8080}
+      MAIL_MAILER: smtp
+      MAIL_HOST: mailpit
+      MAIL_PORT: 1025
+      MAIL_FROM_ADDRESS: noreply@flts.test
+      MAIL_FROM_NAME: FLTS
     ports:
       - "${API_PORT:-8000}:8000"
     depends_on:
       mysql:
         condition: service_healthy
+      mailpit:
+        condition: service_started
     volumes:
       # Uploaded files survive API image rebuilds but remain local demo storage, not RAG input yet.
       - document_storage:/var/www/html/storage/app/documents
@@ -44,6 +52,11 @@ services:
     build: ./ai-service
     ports:
       - "${AI_PORT:-8001}:8001"
+
+  mailpit:
+    image: axllent/mailpit:v1.22
+    ports:
+      - "${MAILPIT_PORT:-8025}:8025"
 
   web:
     build: ./frontend

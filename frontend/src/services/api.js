@@ -32,3 +32,28 @@ export async function apiRequest(path, options = {}) {
 
   return data
 }
+
+export async function apiDownload(path, fallbackFilename) {
+  const token = localStorage.getItem(TOKEN_KEY)
+  const headers = new Headers()
+  if (token) headers.set('Authorization', `Bearer ${token}`)
+  const response = await fetch(`${API_BASE_URL}${path}`, { headers })
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}))
+    throw new ApiError(data.message || `Download failed (${response.status})`, response.status, data.errors || {})
+  }
+
+  const blob = await response.blob()
+  const contentDisposition = response.headers.get('content-disposition') || ''
+  const matchedName = contentDisposition.match(/filename\*?=(?:UTF-8''|\")?([^\";]+)/i)
+  const filename = matchedName ? decodeURIComponent(matchedName[1].replace(/\"/g, '')) : fallbackFilename
+  const objectUrl = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = objectUrl
+  anchor.download = filename
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  URL.revokeObjectURL(objectUrl)
+}

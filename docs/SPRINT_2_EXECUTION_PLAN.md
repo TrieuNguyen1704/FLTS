@@ -352,3 +352,12 @@ Các mã dưới đây lấy từ User Story v1.1, không phải cột trong Spr
 8. Chưa có parser, queue, Chroma, model, test fixtures hoặc AI integration trong source hiện tại.
 
 Không blocker nào ở trên là bằng chứng Sprint 2 thất bại; đây là điều kiện cần xử lý hoặc xác nhận trước khi nhóm tuyên bố các PB tương ứng hoàn thành.
+
+## 13. Cập nhật trước khi bắt đầu Sprint 2 — 26/09/2026
+
+Các dòng blocker ở phần 12 là snapshot tại thời điểm lập plan, không còn là trạng thái hiện tại cho các điểm dưới đây:
+
+- Repository đã có remote GitHub, branch `main`, PR evidence và CI chạy xanh cho `backend`/`frontend`; workflow hiện dùng PHP 8.4. Một job `backend-quality` (PHP syntax lint) đã được thêm vào source và cần chạy xanh trên PR tiếp theo trước khi gắn vào ruleset required check.
+- Sprint 1 code closeout đã thêm registration, password recovery, account management, course update và document search/download. Xem `docs/SPRINT_1_CLOSEOUT_STATUS.md` để biết bằng chứng và giới hạn.
+- Sprint 1 chưa được phép gọi là hoàn tất toàn bộ: PB13 state transition/error vẫn là carry-over có chủ đích sang Sprint 2; Actual workbook và bằng chứng team-clone/PR review phải do nhóm bổ sung theo thực tế.
+- Quyết định OpenAI vẫn chỉ là direction đã ghi: `text-embedding-3-small` và `gpt-4.1-mini`. ChromaDB vẫn cần nhóm xác nhận và pin version; chưa có SDK/API key nào trong repository.

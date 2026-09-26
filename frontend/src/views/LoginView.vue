@@ -8,7 +8,7 @@ import { toast } from '../stores/toast'
 
 const router = useRouter()
 const route = useRoute()
-const form = reactive({ email: 'lecturer@flts.test', password: 'DemoPass123!' })
+const form = reactive({ email: String(route.query.email || 'lecturer@flts.test'), password: 'DemoPass123!' })
 const error = ref('')
 const loading = ref(false)
 
@@ -22,7 +22,7 @@ async function submit() {
   try {
     const user = await authStore.login(form)
     toast.show(`Welcome back, ${user.name}.`)
-    const fallback = user.role === 'student' ? { name: 'student-dashboard' } : { name: 'lecturer-dashboard' }
+    const fallback = user.role === 'student' ? { name: 'student-dashboard' } : user.role === 'admin' ? { name: 'admin-dashboard' } : { name: 'lecturer-dashboard' }
     router.push(route.query.redirect || fallback)
   } catch (requestError) {
     error.value = requestError.message
@@ -46,8 +46,9 @@ async function submit() {
         <p v-if="error" class="form-alert" role="alert">{{ error }}</p>
         <BaseButton type="submit" :loading="loading" class="button--full">Sign in</BaseButton>
       </form>
-      <div class="demo-accounts"><span>Demo accounts</span><button type="button" @click="selectAccount('lecturer@flts.test')">Lecturer</button><button type="button" @click="selectAccount('student@flts.test')">Student</button></div>
-      <p class="login-card__note">Password for both accounts: <code>DemoPass123!</code></p>
+      <div class="demo-accounts"><span>Demo accounts</span><button type="button" @click="selectAccount('lecturer@flts.test')">Lecturer</button><button type="button" @click="selectAccount('student@flts.test')">Student</button><button type="button" @click="selectAccount('admin@flts.test')">Administrator</button></div>
+      <p class="login-card__note">Password for all demo accounts: <code>DemoPass123!</code></p>
+      <p class="login-card__actions"><RouterLink :to="{ name: 'register' }">Create account</RouterLink><RouterLink :to="{ name: 'password-recovery' }">Forgot password?</RouterLink></p>
     </main>
   </div>
 </template>

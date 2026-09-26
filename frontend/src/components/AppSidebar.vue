@@ -8,13 +8,14 @@ const navigation = computed(() => {
       { label: 'Overview', icon: '◈', to: { name: 'lecturer-dashboard' } },
       { label: 'Course management', icon: '▣', to: { name: 'course-management' } },
     ]
+  if (authStore.role.value === 'admin') return [{ label: 'Account management', icon: 'â—†', to: { name: 'admin-dashboard' } }]
   return []
 })
 </script>
 
 <template>
   <aside class="sidebar">
-    <RouterLink class="brand" :to="authStore.role.value === 'student' ? { name: 'student-dashboard' } : authStore.role.value === 'lecturer' ? { name: 'lecturer-dashboard' } : { name: 'access-unavailable' }">
+    <RouterLink class="brand" :to="authStore.role.value === 'student' ? { name: 'student-dashboard' } : authStore.role.value === 'lecturer' ? { name: 'lecturer-dashboard' } : authStore.role.value === 'admin' ? { name: 'admin-dashboard' } : { name: 'access-unavailable' }">
       <span class="brand__mark">F</span><span>FLTS</span>
     </RouterLink>
     <p class="sidebar__caption">SPRINT 1 DEMO</p>
