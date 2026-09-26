@@ -1077,3 +1077,12 @@ FLTS is not 'an AI that replaces lecturers'. It is a document-grounded learning-
 - Integration testing created Lecturer-owned course `UI-2609 — Sprint 1 Interface Review` and stored one copy of the User Story DOCX. A now-corrected PHPUnit isolation defect subsequently cleared that temporary data; the current demo database was seeded again. This is not completion evidence or a claim of team contribution.
 - PHPUnit initially inherited Docker MySQL environment variables despite SQLite entries in `phpunit.xml`; `RefreshDatabase` could therefore empty demo tables. Test bootstrap now forces SQLite in-memory before any test connection resolves. A subsequent passing PHPUnit run (4 tests, 19 assertions) preserved the Lecturer and Student seed accounts, and Lecturer UI login was reverified.
 - Administrator management UI, UI enrollment management, password recovery, document processing, RAG, learning-object workflows, analytics, and research evaluation remain outside the completed evidence for this increment.
+
+## 26. Sprint 2 AI Provider Decision — 2026-09-26
+
+- The project lead selected the **OpenAI API direction** for the Sprint 2 RAG vertical slice. This supersedes the previously open provider decision only; it does not make Sprint 2 functionality complete.
+- Planned embedding model: `text-embedding-3-small` (default 1536 dimensions unless a documented, tested dimension reduction is adopted).
+- Planned generation model: `gpt-4.1-mini`, with Structured Outputs/JSON Schema validation required before US-38/PB23 can be reported as complete.
+- An OpenAI Platform API key and billing/usage limit are required; a ChatGPT subscription is not treated as an API credential. The key must exist only in each developer's ignored local `.env`, never in Git, source code, screenshots, or documentation.
+- ChromaDB remains a separate unresolved decision: the Sprint 2 workbook names local ChromaDB, while the master context historically marked the vector database TBD. Confirm it explicitly before PB20 and pin its image/client version.
+- This decision does not authorize adding an LLM SDK or cloud credentials before the relevant PB is started through the normal branch/PR process.
