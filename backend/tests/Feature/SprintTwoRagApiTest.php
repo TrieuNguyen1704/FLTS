@@ -156,6 +156,17 @@ class SprintTwoRagApiTest extends TestCase
             ->assertJsonMissingPath('detail');
     }
 
+    public function test_rate_limited_evidence_returns_a_safe_retryable_response(): void
+    {
+        [, $course, , $token] = $this->ownedDocument();
+        Http::fake(['*' => Http::response(['detail' => ['code' => 'GEMINI_RATE_LIMITED', 'message' => 'provider quota detail']], 429)]);
+
+        $this->withToken($token)->postJson("/api/courses/{$course->id}/evidence-prototypes", ['prompt' => 'Find the source'])
+            ->assertStatus(429)
+            ->assertJsonPath('message', 'Gemini is temporarily rate limited. Please retry shortly.')
+            ->assertJsonMissingPath('detail');
+    }
+
     private function ownedDocument(): array
     {
         $lecturer = User::create(['name' => 'Lecturer', 'email' => 'owner@test.dev', 'password' => bcrypt('Password123!'), 'role' => 'lecturer']);

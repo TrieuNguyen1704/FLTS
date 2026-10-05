@@ -92,3 +92,19 @@ Results: Laravel **15 tests / 80 assertions**; FastAPI **13 passed** (one non-bl
 - Capture a fresh Lecturer UI evidence-generation response with structured fields and citations, then compare every citation to the retrieval result.
 - Execute the documented Chroma-restart retrieval check against a real processed document, plus the corrupt/empty/error and cross-account authorization cases.
 - Add a permitted legacy binary DOC fixture before claiming DOC parser fidelity; OCR, re-ranking, evaluation, quiz generation, publishing and analytics remain outside this slice.
+
+## Evidence-response repair verification — 05/10/2026
+
+The previous Lecturer evidence request could time out at the Nginx proxy and, after that was investigated, fail with `UNGROUNDABLE_CITATION`. The system no longer accepts model-provided database IDs. Gemini is asked for validated indexes into the numbered retrieved sources; FastAPI maps those indexes to authoritative vector IDs and metadata.
+
+Post-fix local record:
+
+| Check | Result |
+|---|---|
+| Application services rebuild/recreate | `api`, `queue-worker`, `web`, `ai` rebuilt/recreated; existing MySQL/Chroma data retained. |
+| Compose status | Seven services running; API, AI, MySQL, Chroma and Mailpit healthy. |
+| Real provider evidence request | Completed successfully with **2 citations**. Answer/source text is intentionally not recorded here. |
+| FastAPI tests | **16 passed**; one non-blocking Starlette deprecation warning. |
+| Laravel tests | **16 tests / 83 assertions**. |
+
+The UI should now show a response and citations when the current Lecturer session uses a processed course document. A future review capture must still record the course/document/run identifier without exposing learner data, source-document content, or secrets.

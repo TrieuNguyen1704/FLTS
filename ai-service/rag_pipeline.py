@@ -104,6 +104,8 @@ def _extract_doc(content: bytes) -> ExtractedDocument:
 
 def clean_text(value: str) -> str:
     normalized = unicodedata.normalize('NFKC', value).replace('\x00', '')
+    # Email addresses in copied headers/footers are not useful retrieval context and should not be shown to learners.
+    normalized = re.sub(r'(?i)\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b', '[redacted-email]', normalized)
     normalized = re.sub(r'[\t\r ]+', ' ', normalized)
     normalized = re.sub(r' *\n *', '\n', normalized)
     return re.sub(r'\n{3,}', '\n\n', normalized).strip()
@@ -121,7 +123,8 @@ def chunk_text(text: str, target_words: int = 220, overlap_words: int = 30) -> l
         if not current:
             return
         content = '\n\n'.join(current).strip()
-        source = re.search(r'^\[(Page|Paragraph|Table) (\d+)\]', content)
+        # Overlap can put ordinary text before a source marker; search the whole chunk so citations remain useful.
+        source = re.search(r'\[(Page|Paragraph|Table) (\d+)\]', content)
         chunks.append({
             'chunk_index': len(chunks),
             'content': content,

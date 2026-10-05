@@ -29,6 +29,10 @@ def test_clean_text_normalizes_whitespace() -> None:
     assert clean_text('  Xin\tchào\r\n\n\nFLTS  ') == 'Xin chào\n\nFLTS'
 
 
+def test_clean_text_redacts_email_addresses_from_retrieval_context() -> None:
+    assert clean_text('Liên hệ lecturer@flts.test để biết thêm.') == 'Liên hệ [redacted-email] để biết thêm.'
+
+
 def test_chunk_text_is_deterministic_and_keeps_overlap() -> None:
     text = '\n\n'.join([' '.join(f'word{index}_{item}' for item in range(90)) for index in range(4)])
     chunks = chunk_text(text, target_words=120, overlap_words=10)
@@ -36,6 +40,11 @@ def test_chunk_text_is_deterministic_and_keeps_overlap() -> None:
     assert chunks[0]['chunk_index'] == 0
     assert chunks[0]['content_hash']
     assert 'word0_89' in chunks[1]['content']
+
+
+def test_chunk_locator_survives_overlap_prefix() -> None:
+    chunks = chunk_text('Dòng mở đầu.\n\n[Page 5]\nNội dung thuộc trang năm.', target_words=50, overlap_words=5)
+    assert chunks[0]['source_locator'] == 'page 5'
 
 
 def test_legacy_doc_uses_the_selected_parser(monkeypatch) -> None:

@@ -19,16 +19,20 @@ from rag_pipeline import PipelineError, chunk_text, extract_document
 APP = FastAPI(title='FLTS AI Service', version='0.2.0')
 # Keep the conventional ASGI export expected by the Docker uvicorn command.
 app = APP
-LOGGER = logging.getLogger(__name__)
+# Uvicorn configures this logger in the container, so provider failures are retained for operators without reaching browsers.
+LOGGER = logging.getLogger('uvicorn.error')
 COLLECTION_NAME = os.getenv('CHROMA_COLLECTION', 'flts_document_chunks')
 EMBEDDING_MODEL = os.getenv('GEMINI_EMBEDDING_MODEL', 'gemini-embedding-2')
 GENERATION_MODEL = os.getenv('GEMINI_GENERATION_MODEL', 'gemini-2.5-flash')
 EMBEDDING_BATCH_SIZE = int(os.getenv('GEMINI_EMBEDDING_BATCH_SIZE', '40'))
 EMBEDDING_MAX_RETRIES = int(os.getenv('GEMINI_EMBEDDING_MAX_RETRIES', '15'))
+# Interactive retrieval/evidence must respond promptly. Long retries are reserved for the queue worker.
+EMBEDDING_QUERY_MAX_RETRIES = int(os.getenv('GEMINI_QUERY_MAX_RETRIES', '1'))
 
 
 @APP.exception_handler(PipelineError)
 async def pipeline_error_handler(_, exc: PipelineError) -> JSONResponse:
+    LOGGER.warning('RAG pipeline error code=%s stage=%s status=%s', exc.code, exc.stage, exc.status_code)
     return JSONResponse(status_code=exc.status_code, content={'detail': {'code': exc.code, 'message': str(exc), 'stage': exc.stage}})
 
 
@@ -69,6 +73,11 @@ def extract_retry_delay(err_str: str) -> float:
     return 35.0
 
 
+def is_rate_limited(exception: Exception) -> bool:
+    message = str(exception)
+    return 'RESOURCE_EXHAUSTED' in message or '429' in message
+
+
 def embed(contents: list[str], task_type: str) -> list[list[float]]:
     if not contents:
         return []
@@ -85,7 +94,7 @@ def embed(contents: list[str], task_type: str) -> list[list[float]]:
             batch_num = idx // batch_size + 1
             print(f'Embedding batch {batch_num}/{total_batches} ({len(batch)} items)...', flush=True)
             formatted_contents = [types.Content(parts=[types.Part.from_text(text=item)]) for item in batch]
-            max_retries = EMBEDDING_MAX_RETRIES
+            max_retries = EMBEDDING_QUERY_MAX_RETRIES if task_type == 'RETRIEVAL_QUERY' else EMBEDDING_MAX_RETRIES
             for attempt in range(max_retries):
                 try:
                     response = client.models.embed_content(
@@ -99,7 +108,14 @@ def embed(contents: list[str], task_type: str) -> list[list[float]]:
                     break
                 except Exception as exc:
                     err_str = str(exc)
-                    if 'RESOURCE_EXHAUSTED' in err_str or '429' in err_str:
+                    if is_rate_limited(exc):
+                        if attempt + 1 >= max_retries:
+                            raise PipelineError(
+                                'GEMINI_RATE_LIMITED',
+                                'Gemini is temporarily rate limited. Please retry shortly.',
+                                'embedding',
+                                429,
+                            ) from exc
                         delay = extract_retry_delay(err_str)
                         print(f'Rate limit reached on batch {batch_num} (attempt {attempt + 1}/{max_retries}). Waiting {delay:.1f}s...', flush=True)
                         time.sleep(delay)
@@ -142,6 +158,16 @@ class EvidenceOutput(BaseModel):
     limitations: str
 
 
+class EvidenceDraft(BaseModel):
+    answer: str
+    citation_indexes: list[int] = Field(min_length=1)
+    limitations: str
+
+
+def redact_sensitive_text(value: str) -> str:
+    return re.sub(r'(?i)\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b', '[redacted-email]', value)
+
+
 def search_collection(request: SearchRequest) -> dict[str, Any]:
     vector = embed([request.query], 'RETRIEVAL_QUERY')[0]
     where: dict[str, Any] = {'course_id': str(request.course_id)}
@@ -157,7 +183,7 @@ def search_collection(request: SearchRequest) -> dict[str, Any]:
     matches = []
     for vector_id, content, metadata, distance in zip(ids, documents, metadatas, distances):
         matches.append({
-            'vector_id': vector_id, 'content': content, 'score': round(1 / (1 + float(distance)), 4),
+            'vector_id': vector_id, 'content': redact_sensitive_text(content), 'score': round(1 / (1 + float(distance)), 4),
             'document_id': int(metadata['document_id']), 'document_name': metadata['document_name'],
             'source_locator': metadata.get('source_locator') or None,
         })
@@ -223,10 +249,10 @@ def generate_evidence(request: EvidenceRequest) -> dict[str, Any]:
     matches = retrieved['matches']
     if not matches:
         raise PipelineError('NO_GROUNDED_CONTEXT', 'No processed chunks matched this request.', 'generation', 422)
-    context = '\n\n'.join(f'[{match["vector_id"]}] {match["content"]}' for match in matches)
+    context = '\n\n'.join(f'[Source {index}] {match["content"]}' for index, match in enumerate(matches, start=1))
     instruction = (
         'Answer only from the source chunks below. Return Vietnamese JSON following the schema. '
-        'Every citation.vector_id must be one of the supplied bracket identifiers. '\
+        'citation_indexes must contain one or more supplied Source numbers and must not invent any number. '\
         f'\n\nQuestion: {request.prompt}\n\nSource chunks:\n{context}'
     )
     try:
@@ -235,16 +261,25 @@ def generate_evidence(request: EvidenceRequest) -> dict[str, Any]:
             model=GENERATION_MODEL,
             contents=instruction,
             # google-genai 2.x calls this response_schema; it constrains the provider output before validation below.
-            config=types.GenerateContentConfig(response_mime_type='application/json', response_schema=EvidenceOutput.model_json_schema()),
+            config=types.GenerateContentConfig(response_mime_type='application/json', response_schema=EvidenceDraft.model_json_schema()),
         )
-        output = EvidenceOutput.model_validate(json.loads(response.text))
+        draft = EvidenceDraft.model_validate(json.loads(response.text))
     except PipelineError:
         raise
     except Exception as exc:
+        print(f'Gemini evidence-generation failure type: {type(exc).__name__}', flush=True)
+        LOGGER.exception('Gemini evidence-generation request failed')
+        if is_rate_limited(exc):
+            raise PipelineError('GEMINI_RATE_LIMITED', 'Gemini is temporarily rate limited. Please retry shortly.', 'generation', 429) from exc
         raise PipelineError('GENERATION_FAILED', 'Gemini could not generate grounded evidence.', 'generation', 502) from exc
-    permitted = {match['vector_id'] for match in matches}
-    if any(citation.vector_id not in permitted for citation in output.citations):
+    if any(index < 1 or index > len(matches) for index in draft.citation_indexes):
         raise PipelineError('UNGROUNDABLE_CITATION', 'Gemini returned a citation outside the retrieved source set.', 'generation', 502)
+    selected_indexes = list(dict.fromkeys(draft.citation_indexes))
+    output = EvidenceOutput(
+        answer=draft.answer,
+        limitations=draft.limitations,
+        citations=[Citation(vector_id=matches[index - 1]['vector_id'], source_locator=matches[index - 1]['source_locator']) for index in selected_indexes],
+    )
     return {'evidence': output.model_dump(), 'retrieval': retrieved}
 
 

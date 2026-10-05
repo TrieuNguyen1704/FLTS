@@ -10,6 +10,8 @@ Trạng thái closeout có bằng chứng thực tế, giới hạn còn lại v
 
 Sprint 2 is in implementation, not complete. The current branch adds a real Laravel database queue/worker, FastAPI PDF/DOC/DOCX parser, text cleaning/chunking, local ChromaDB, Gemini embedding/generation integration, and Lecturer-only retrieval/evidence APIs. The current runtime uses `gemini-embedding-2` with 768-dimensional vectors and `gemini-2.5-flash`; batching and bounded rate-limit retry are configured for document embedding. See [the execution-plan progress log](docs/SPRINT_2_EXECUTION_PLAN.md).
 
+For the Lecturer's evidence-backed response, the AI receives only the current course's retrieved chunks and returns validated source indexes; the service maps those indexes back to authoritative Chroma vector metadata. If Gemini temporarily rate-limits an interactive query, the UI receives a retryable message rather than waiting through long background-style retries. E-mail addresses found in retrieved source text are redacted from the browser-facing RAG result.
+
 For the repeatable live-provider verification procedure and the record fields required at Sprint Review, use [the Sprint 2 E2E evidence runbook](docs/SPRINT_2_E2E_EVIDENCE.md).
 
 After `Copy-Item .env.example .env`, edit the ignored `.env` and set a newly generated `GEMINI_API_KEY`; the key must never be committed. Also set a different high-entropy `AI_SERVICE_TOKEN` for this local stack. Without either value, containers still start, but internal RAG requests intentionally fail instead of using a predictable default or pretending they succeeded.

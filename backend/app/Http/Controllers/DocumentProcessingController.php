@@ -7,6 +7,7 @@ use App\Models\Course;
 use App\Models\DocumentProcessingRun;
 use App\Models\TeachingDocument;
 use App\Services\RagService;
+use App\Services\RagServiceException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -59,6 +60,11 @@ class DocumentProcessingController
 
         try {
             $results = $rag->search($course, $data['query'], $data['top_k'] ?? 5, $documentIds);
+        } catch (RagServiceException $exception) {
+            $message = in_array($exception->getCode(), [422, 429], true)
+                ? $exception->getMessage()
+                : 'RAG retrieval is temporarily unavailable.';
+            return response()->json(['message' => $message], $exception->getCode());
         } catch (\RuntimeException $exception) {
             // FastAPI messages can contain deployment diagnostics; keep the browser response safe and stable.
             return response()->json(['message' => 'RAG retrieval is temporarily unavailable.'], 503);
@@ -75,6 +81,11 @@ class DocumentProcessingController
         ]);
         try {
             return response()->json($rag->generateEvidence($course, $data['prompt'], $data['top_k'] ?? 5));
+        } catch (RagServiceException $exception) {
+            $message = in_array($exception->getCode(), [422, 429], true)
+                ? $exception->getMessage()
+                : 'Grounded evidence generation is temporarily unavailable.';
+            return response()->json(['message' => $message], $exception->getCode());
         } catch (\RuntimeException $exception) {
             return response()->json(['message' => 'Grounded evidence generation is temporarily unavailable.'], 503);
         }

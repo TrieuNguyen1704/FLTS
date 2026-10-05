@@ -94,7 +94,7 @@ def test_embed_retries_a_rate_limited_batch_without_leaking_provider_message(mon
     sleep_calls: list[float] = []
     monkeypatch.setattr(main, 'gemini_client', lambda: FakeEmbeddingClient(models))
     monkeypatch.setattr(main, 'EMBEDDING_BATCH_SIZE', 40)
-    monkeypatch.setattr(main, 'EMBEDDING_MAX_RETRIES', 2)
+    monkeypatch.setattr(main, 'EMBEDDING_QUERY_MAX_RETRIES', 2)
     monkeypatch.setattr(main.time, 'sleep', sleep_calls.append)
 
     vectors = main.embed(['one chunk'], 'RETRIEVAL_QUERY')
@@ -102,6 +102,21 @@ def test_embed_retries_a_rate_limited_batch_without_leaking_provider_message(mon
     assert len(models.calls) == 2
     assert len(vectors) == 1
     assert sleep_calls == [15.0, 1.0]
+
+
+def test_interactive_query_fails_fast_when_gemini_is_rate_limited(monkeypatch) -> None:
+    models = FakeEmbeddingModels(fail_first=True)
+    sleep_calls: list[float] = []
+    monkeypatch.setattr(main, 'gemini_client', lambda: FakeEmbeddingClient(models))
+    monkeypatch.setattr(main, 'EMBEDDING_QUERY_MAX_RETRIES', 1)
+    monkeypatch.setattr(main.time, 'sleep', sleep_calls.append)
+
+    with pytest.raises(PipelineError) as error:
+        main.embed(['one query'], 'RETRIEVAL_QUERY')
+
+    assert error.value.code == 'GEMINI_RATE_LIMITED'
+    assert error.value.status_code == 429
+    assert sleep_calls == []
 
 
 def test_embed_hides_unexpected_provider_diagnostics(monkeypatch) -> None:
@@ -132,7 +147,7 @@ class FakeGeminiModels:
     def generate_content(self, **_: object) -> FakeGeneratedResponse:
         return FakeGeneratedResponse({
             'answer': 'Grounded answer from the selected course source.',
-            'citations': [{'vector_id': '990101:1:0', 'source_locator': 'page 1'}],
+            'citation_indexes': [1],
             'limitations': 'Only the retrieved source was used.',
         })
 
@@ -156,7 +171,7 @@ def test_process_retrieve_filter_and_delete_use_real_chromadb(monkeypatch) -> No
     client = TestClient(main.app)
     auth_headers = headers(monkeypatch)
 
-    process(client, auth_headers, document_id=990101, course_id=9901, text='Course one RAG source')
+    process(client, auth_headers, document_id=990101, course_id=9901, text='Course one RAG source owner@flts.test')
     process(client, auth_headers, document_id=990201, course_id=9902, text='Course two private source')
 
     response = client.post('/internal/v1/retrieval/search', headers=auth_headers, json={'course_id': 9901, 'query': 'RAG source', 'top_k': 5})
@@ -164,6 +179,7 @@ def test_process_retrieve_filter_and_delete_use_real_chromadb(monkeypatch) -> No
     matches = response.json()['matches']
     assert [match['document_id'] for match in matches] == [990101]
     assert matches[0]['source_locator'] == 'page 1'
+    assert 'owner@flts.test' not in matches[0]['content']
 
     evidence = client.post('/internal/v1/evidence/generate', headers=auth_headers, json={'course_id': 9901, 'prompt': 'What does the source say?', 'top_k': 5})
     assert evidence.status_code == 200, evidence.text

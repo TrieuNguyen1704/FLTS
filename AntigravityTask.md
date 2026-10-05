@@ -158,3 +158,10 @@ Khi **Codex** tiếp nhận công việc, hãy chú ý các định hướng ti�
 - Source/config đã được đồng bộ để model fallback của Compose, Laravel và FastAPI đều là `gemini-embedding-2` / `gemini-2.5-flash`; batch size 40 và retry limit 15 được đưa thành biến môi trường. Bổ sung FastAPI regression test cho batching, vector order, retry 429 và lỗi provider an toàn.
 - Re-run regression: Laravel **15 tests / 80 assertions**; FastAPI **13 passed** (một cảnh báo deprecation không chặn test). Chi tiết evidence/boundary ở `docs/SPRINT_2_E2E_EVIDENCE.md`.
 - Không suy diễn rằng toàn Sprint 2 đã Done: document DOCX 4 trong handoff đã bị xóa nên cần chạy lại để có evidence DB/Chroma; cần capture mới UI retrieval/evidence, Chroma restart với document thật và fixture/authorization/error matrix.
+
+## 9. Codex evidence-response repair verification — 05/10/2026
+
+- Sửa nguyên nhân 502 sau khi khắc phục 504: Gemini không còn phải sinh vector ID. Service yêu cầu `citation_indexes`, kiểm tra index nằm trong tập source retrieve, rồi map phía server sang vector ID/metadata thật.
+- Retrieval/context redact địa chỉ e-mail; page/paragraph/table locator còn đúng khi chunk overlap. Tương tác UI gặp quota Gemini trả 429 an toàn/thử lại thay vì chờ retry dài; Nginx có timeout RAG tương ứng.
+- Kiểm chứng sau recreate app services: 7 service Compose running (API/AI/MySQL/Chroma/Mailpit healthy); real internal Gemini evidence request thành công và trả 2 citations. FastAPI: **16 passed** (1 warning không chặn); Laravel: **16 tests / 83 assertions**.
+- Phần chưa đủ evidence vẫn giữ nguyên: DOCX fixture/run mới, real-document Chroma restart, cross-account/UI capture, corrupt/empty fixture matrix và PR/review/ceremony evidence.
