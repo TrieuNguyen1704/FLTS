@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 import main
@@ -30,6 +32,13 @@ def text_pdf(value: str) -> bytes:
 def headers(monkeypatch) -> dict[str, str]:
     monkeypatch.setenv('AI_SERVICE_TOKEN', 'test-token')
     return {'Authorization': 'Bearer test-token'}
+
+
+def test_missing_service_token_never_falls_back_to_a_predictable_default(monkeypatch) -> None:
+    monkeypatch.delenv('AI_SERVICE_TOKEN', raising=False)
+    with pytest.raises(HTTPException) as error:
+        main.require_service_token('Bearer guessed-example-token')
+    assert error.value.status_code == 401
 
 
 def fake_embeddings(contents: list[str], _: str) -> list[list[float]]:

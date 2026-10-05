@@ -66,11 +66,13 @@ class DocumentController
             return response()->json(['message' => 'This document is currently being processed and cannot be deleted yet.'], 409);
         }
 
-        try {
-            // Run cleanup for every terminal state: a failed persistence transaction can leave vectors behind.
-            $rag->deleteDocumentVectors($document);
-        } catch (\RuntimeException $exception) {
-            return response()->json(['message' => 'Document deletion is paused because vector cleanup is unavailable.'], 503);
+        if (in_array($document->processing_status, ['processed', 'failed'], true)) {
+            try {
+                // Failed persistence can leave vectors behind; pending uploads cannot have been indexed yet.
+                $rag->deleteDocumentVectors($document);
+            } catch (\RuntimeException $exception) {
+                return response()->json(['message' => 'Document deletion is paused because vector cleanup is unavailable.'], 503);
+            }
         }
         Storage::disk('local')->delete($document->stored_path);
         $document->delete();

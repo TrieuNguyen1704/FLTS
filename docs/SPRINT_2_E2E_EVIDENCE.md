@@ -5,7 +5,7 @@
 ## Safety gate
 
 1. Revoke the key that was pasted into chat in Google AI Studio.
-2. Copy `.env.example` to `.env` if needed. Set a newly created `GEMINI_API_KEY` and replace `AI_SERVICE_TOKEN` with a local random value. Do not paste either value into this file, a commit, a screenshot, or a PR.
+2. Copy `.env.example` to `.env` if needed. Set a newly created `GEMINI_API_KEY` and a high-entropy `AI_SERVICE_TOKEN`; the examples intentionally leave both blank. Do not paste either value into this file, a commit, a screenshot, or a PR.
 3. Confirm that `git status --short` does not list `.env`.
 
 ## Preflight

@@ -12,7 +12,7 @@ Sprint 2 is in implementation, not complete. The current branch adds a real Lara
 
 For the repeatable live-provider verification procedure and the record fields required at Sprint Review, use [the Sprint 2 E2E evidence runbook](docs/SPRINT_2_E2E_EVIDENCE.md).
 
-After `Copy-Item .env.example .env`, edit the ignored `.env` and set a newly generated `GEMINI_API_KEY`; the key must never be committed. Also replace `AI_SERVICE_TOKEN` with a local random value. Without the Gemini key all containers still start, but document processing and RAG intentionally return a configuration error instead of pretending they succeeded.
+After `Copy-Item .env.example .env`, edit the ignored `.env` and set a newly generated `GEMINI_API_KEY`; the key must never be committed. Also set a different high-entropy `AI_SERVICE_TOKEN` for this local stack. Without either value, containers still start, but internal RAG requests intentionally fail instead of using a predictable default or pretending they succeeded.
 
 ## Yêu cầu
 

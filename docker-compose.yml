@@ -34,7 +34,7 @@ services:
       # The database queue makes processing durable; the worker below consumes these jobs.
       QUEUE_CONNECTION: database
       AI_SERVICE_URL: http://ai:8001
-      AI_SERVICE_TOKEN: ${AI_SERVICE_TOKEN:-replace-this-local-service-token}
+      AI_SERVICE_TOKEN: ${AI_SERVICE_TOKEN:-}
       FRONTEND_URL: http://localhost:${APP_PORT:-8080}
       MAIL_MAILER: ${MAIL_MAILER:-smtp}
       MAIL_HOST: ${MAIL_HOST:-mailpit}
@@ -64,7 +64,7 @@ services:
   ai:
     build: ./ai-service
     environment:
-      AI_SERVICE_TOKEN: ${AI_SERVICE_TOKEN:-replace-this-local-service-token}
+      AI_SERVICE_TOKEN: ${AI_SERVICE_TOKEN:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_EMBEDDING_MODEL: ${GEMINI_EMBEDDING_MODEL:-text-embedding-004}
       GEMINI_GENERATION_MODEL: ${GEMINI_GENERATION_MODEL:-gemini-1.5-flash}
@@ -98,7 +98,7 @@ services:
       DB_PASSWORD: ${MYSQL_PASSWORD:-flts_secret}
       QUEUE_CONNECTION: database
       AI_SERVICE_URL: http://ai:8001
-      AI_SERVICE_TOKEN: ${AI_SERVICE_TOKEN:-replace-this-local-service-token}
+      AI_SERVICE_TOKEN: ${AI_SERVICE_TOKEN:-}
       DOCUMENT_MAX_KB: ${DOCUMENT_MAX_KB:-10240}
     depends_on:
       mysql:
