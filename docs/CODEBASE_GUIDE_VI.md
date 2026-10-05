@@ -200,4 +200,4 @@ Tình trạng document vẫn phải trình bày chính xác: file được lưu 
 
 Các bảng mới cần hiểu là `document_processing_runs` (mỗi lần thử), `document_extractions` (text đã chuẩn hóa), `document_chunks` (đoạn + hash/source), và `document_vector_references` (liên kết chunk MySQL với vector Chroma). `TeachingDocument.latest_processing_run_id` chỉ là con trỏ để UI poll nhanh, không thay thế lịch sử runs.
 
-Đây là implementation checkpoint, không phải tuyên bố RAG hoàn thành: chưa có Gemini key mới để xác minh E2E thật; legacy DOC/OCR/evaluation/quiz/publish/analytics vẫn chưa có. Xem `docs/SPRINT_2_EXECUTION_PLAN.md` để biết evidence đã chạy và các blocker.
+Đây là implementation checkpoint, không phải tuyên bố RAG hoàn thành: chưa có Gemini key mới để xác minh E2E thật; legacy DOC dùng `antiword` nhưng chưa có fixture DOC thật để xác minh fidelity; OCR/evaluation/quiz/publish/analytics vẫn chưa có. Xem `docs/SPRINT_2_EXECUTION_PLAN.md` để biết evidence đã chạy và các blocker.

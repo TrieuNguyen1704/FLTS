@@ -93,6 +93,6 @@ Khi **Codex** tiếp nhận công việc, hãy chú ý các định hướng ti�
 
 - Branch in progress: `feature/sprint2-rag-vertical-slice`; do not merge or report Sprint 2 complete without PR/review and the evidence below.
 - The 5-service snapshot is obsolete. Compose now has 7 services: `api`, `queue-worker`, `ai`, `chroma`, `mysql`, `mailpit`, `web`. `api` must be healthy before worker starts.
-- Implemented code: Laravel queue/processing-runs/chunk/vector-reference migrations, authorized processing/retry/status/retrieval/evidence endpoints, FastAPI PDF/DOCX parser + cleaner/chunker + Chroma + Gemini SDK, and real Lecturer RAG controls in Course Detail. Legacy `.doc` is explicitly unsupported at processing time; no OCR/conversion was claimed.
-- Verified at this checkpoint: Docker services Up, Laravel test suite 10 tests / 62 assertions, FastAPI 6 tests. A missing key results in an explicit error; it is not a processed document.
+- Implemented code: Laravel queue/processing-runs/chunk/vector-reference migrations, authorized processing/retry/status/retrieval/evidence endpoints, FastAPI PDF/DOC/DOCX parser + cleaner/chunker + Chroma + Gemini SDK, and real Lecturer RAG controls in Course Detail. Legacy DOC uses `antiword` with a timeout; OCR is not implemented.
+- Verified at this checkpoint: Docker services Up, Laravel test suite 12 tests / 69 assertions, FastAPI 7 tests. A missing key results in an explicit error; it is not a processed document.
 - Security blocker: the Gemini key shared in chat must be revoked/rotated. Never copy it from chat. Put only the replacement in ignored `.env` (`GEMINI_API_KEY`); set a non-default `AI_SERVICE_TOKEN` too. Real embedding/generation E2E has not run until that is done.

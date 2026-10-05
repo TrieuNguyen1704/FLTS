@@ -379,21 +379,21 @@ Các dòng blocker ở phần 12 là snapshot tại thời điểm lập plan, k
 - Docker Compose có thêm `queue-worker` và `chroma` (volume `chroma_data`); `api` chạy migration/seed rồi healthcheck, worker chỉ chạy sau khi API healthy. Điều này sửa race condition migration đã quan sát khi hai service cùng migrate.
 - Laravel có database queue, state/run schema, job `ProcessTeachingDocument`, FastAPI client service, API trigger/retry/status/retrieval/evidence và check Lecturer ownership ở backend. Vue Course Detail dùng API thật để trigger/poll trạng thái, xem chunks count, truy xuất Top-K và xem evidence/citations.
 - FastAPI có parser PDF text-based/DOCX, xử lý lỗi có mã/stage, cleaning, deterministic paragraph-window chunking, Gemini embedding 768 chiều, Chroma upsert/delete/search theo course/document metadata và evidence generation có validate citation thuộc tập retrieved context.
-- Versions pinned: Chroma image/client `0.5.23`; `pypdf 5.0.1`; `python-docx 1.1.2`; `google-genai 2.28.0`; `pytest 8.3.3`. SDK 2.x dùng `GenerateContentConfig.response_schema` cho structured JSON; không dùng package cũ không có trường này.
+- Versions pinned: Chroma image/client `0.5.23`; `pypdf 5.0.1`; `python-docx 1.1.2`; `google-genai 2.28.0`; `pytest 8.3.3`. Legacy DOC dùng `antiword 0.37` từ Debian image với timeout 30 giây. SDK 2.x dùng `GenerateContentConfig.response_schema` cho structured JSON; không dùng package cũ không có trường này.
 
 ### Evidence đã chạy
 
 | Hạng mục | Lệnh/kết quả thực tế |
 |---|---|
-| Laravel regression + PB13 API | `docker compose exec -T api php vendor/bin/phpunit --testdox`: **10 tests, 62 assertions passed**. |
-| FastAPI pure pipeline | `docker compose exec -T ai pytest -q`: **6 passed** (PDF, DOCX, cleaning, deterministic chunk/overlap, legacy DOC failure). |
+| Laravel regression + PB13 API | `docker compose exec -T api php vendor/bin/phpunit --testdox`: **12 tests, 69 assertions passed**. |
+| FastAPI pure pipeline | `docker compose exec -T ai pytest -q`: **7 passed** (PDF, DOCX, DOC parser invocation/error mapping, cleaning, deterministic chunk/overlap). |
 | Runtime services | `docker compose ps`: `api` healthy; `queue-worker`, `ai`, `chroma`, `mysql`, `mailpit`, `web` Up. |
 | Internal boundary | POST to FastAPI without Bearer service token returned **401**. |
 
 ### Không được đánh dấu Done tại checkpoint này
 
 - Key Gemini đã được gửi qua chat nên phải revoke/rotate. Vì không có key mới trong ignored `.env`, chưa có bằng chứng chạy provider thật cho embedding/generation, chưa có vector persistence-after-restart, retrieval isolation fixture, hay evidence output thật.
-- PDF/DOCX happy-path, corrupt/empty/encrypted fixtures và error persistence cần thêm test matrix. Legacy `.doc` hiện fail rõ ràng, không phải converter; PB16 chưa đạt AC nếu workbook yêu cầu DOC xử lý thật.
+- PDF/DOCX happy-path, corrupt/empty/encrypted fixtures và error persistence cần thêm test matrix. Legacy DOC now uses `antiword`, but a real permitted binary DOC fixture is still required to claim parser fidelity or PB16 acceptance.
 - Không có OCR, re-ranking, benchmark/evaluation, rate limit, virus scan, quiz/publish/analytics. Không tự sửa workbook hay điền Actual hours.
 
 ### Bước tiếp theo bắt buộc trước khi báo PB RAG complete

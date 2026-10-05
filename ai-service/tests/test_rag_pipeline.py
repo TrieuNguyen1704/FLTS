@@ -38,11 +38,27 @@ def test_chunk_text_is_deterministic_and_keeps_overlap() -> None:
     assert 'word0_89' in chunks[1]['content']
 
 
-def test_legacy_doc_is_reported_honestly() -> None:
+def test_legacy_doc_uses_the_selected_parser(monkeypatch) -> None:
+    class Result:
+        returncode = 0
+        stdout = 'Legacy FLTS document'
+
+    monkeypatch.setattr('rag_pipeline.subprocess.run', lambda *args, **kwargs: Result())
+    result = extract_document(b'binary-doc', 'doc')
+    assert result.text == 'Legacy FLTS document'
+    assert result.metadata['parser'] == 'antiword'
+
+
+def test_legacy_doc_error_is_reported_honestly(monkeypatch) -> None:
+    class Result:
+        returncode = 1
+        stdout = ''
+
+    monkeypatch.setattr('rag_pipeline.subprocess.run', lambda *args, **kwargs: Result())
     try:
         extract_document(b'not a real word document', 'doc')
     except PipelineError as error:
-        assert error.code == 'UNSUPPORTED_LEGACY_DOC'
+        assert error.code == 'DOC_EXTRACTION_FAILED'
     else:
         raise AssertionError('Legacy DOC must not be presented as successfully extracted.')
 
@@ -76,4 +92,5 @@ def test_extracts_docx_paragraphs_and_tables() -> None:
     result = extract_document(buffer.getvalue(), 'docx')
     assert 'FLTS document paragraph' in result.text
     assert 'Topic | RAG' in result.text
+    assert '[Paragraph 1]' in result.text
     assert result.metadata['table_count'] == 1

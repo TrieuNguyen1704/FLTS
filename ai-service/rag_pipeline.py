@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import re
+import subprocess
+import tempfile
 import unicodedata
 from dataclasses import dataclass
 from io import BytesIO
@@ -35,8 +37,7 @@ def extract_document(content: bytes, extension: str) -> ExtractedDocument:
     if extension == 'docx':
         return _extract_docx(content)
     if extension == 'doc':
-        # The selected Python libraries intentionally do not pretend to parse legacy binary DOC reliably.
-        raise PipelineError('UNSUPPORTED_LEGACY_DOC', 'Legacy .doc is accepted for upload but is not processable yet. Convert it to .docx or PDF.', 'extracting')
+        return _extract_doc(content)
     raise PipelineError('UNSUPPORTED_FILE_TYPE', 'Only PDF and DOCX are processable in this Sprint 2 slice.', 'extracting')
 
 
@@ -67,7 +68,8 @@ def _extract_docx(content: bytes) -> ExtractedDocument:
     except Exception as exception:
         raise PipelineError('DOCX_EXTRACTION_FAILED', 'The DOCX file could not be read.', 'extracting') from exception
 
-    parts = [paragraph.text for paragraph in document.paragraphs if paragraph.text.strip()]
+    # Mark source boundaries before chunking so citations can identify a DOCX paragraph or table.
+    parts = [f'[Paragraph {index}]\n{paragraph.text}' for index, paragraph in enumerate(document.paragraphs, start=1) if paragraph.text.strip()]
     for table_index, table in enumerate(document.tables, start=1):
         rows = [' | '.join(cell.text.strip() for cell in row.cells) for row in table.rows]
         if any(rows):
@@ -76,6 +78,28 @@ def _extract_docx(content: bytes) -> ExtractedDocument:
     if not text:
         raise PipelineError('NO_EXTRACTABLE_TEXT', 'No extractable text was found in this DOCX document.', 'extracting')
     return ExtractedDocument(text=text, page_count=None, metadata={'parser': 'python-docx', 'table_count': len(document.tables)})
+
+
+def _extract_doc(content: bytes) -> ExtractedDocument:
+    """Extract legacy binary Word via antiword; errors remain explicit because fidelity is format-dependent."""
+    try:
+        with tempfile.NamedTemporaryFile(suffix='.doc') as source:
+            source.write(content)
+            source.flush()
+            result = subprocess.run(['antiword', source.name], capture_output=True, text=True, timeout=30, check=False)
+    except FileNotFoundError as exception:
+        raise PipelineError('DOC_PARSER_UNAVAILABLE', 'The legacy DOC parser is not installed in the AI service.', 'extracting', 503) from exception
+    except subprocess.TimeoutExpired as exception:
+        raise PipelineError('DOC_EXTRACTION_TIMEOUT', 'Legacy DOC extraction exceeded the 30-second limit.', 'extracting', 422) from exception
+    except Exception as exception:
+        raise PipelineError('DOC_EXTRACTION_FAILED', 'The DOC file could not be read.', 'extracting') from exception
+
+    if result.returncode != 0:
+        raise PipelineError('DOC_EXTRACTION_FAILED', 'The legacy DOC file could not be read by the parser.', 'extracting')
+    text = clean_text(result.stdout)
+    if not text:
+        raise PipelineError('NO_EXTRACTABLE_TEXT', 'No extractable text was found in this DOC document.', 'extracting')
+    return ExtractedDocument(text=text, page_count=None, metadata={'parser': 'antiword'})
 
 
 def clean_text(value: str) -> str:
@@ -97,11 +121,11 @@ def chunk_text(text: str, target_words: int = 220, overlap_words: int = 30) -> l
         if not current:
             return
         content = '\n\n'.join(current).strip()
-        page = re.search(r'^\[Page (\d+)\]', content)
+        source = re.search(r'^\[(Page|Paragraph|Table) (\d+)\]', content)
         chunks.append({
             'chunk_index': len(chunks),
             'content': content,
-            'source_locator': f'page {page.group(1)}' if page else None,
+            'source_locator': f'{source.group(1).lower()} {source.group(2)}' if source else None,
             'token_estimate': max(1, round(len(content.split()) * 1.3)),
             'content_hash': hashlib.sha256(content.encode('utf-8')).hexdigest(),
         })

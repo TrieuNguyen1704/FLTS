@@ -153,6 +153,7 @@ async def process_document(
     return {
         'extraction': {'normalized_text': extracted.text, 'character_count': len(extracted.text), 'page_count': extracted.page_count, 'metadata': extracted.metadata},
         'chunks': response_chunks,
+        'embedding_model': EMBEDDING_MODEL,
         'vector_store': {'provider': 'chromadb', 'collection': COLLECTION_NAME},
     }
 

@@ -44,7 +44,17 @@ class ProcessTeachingDocument implements ShouldQueue
         $document->update(['processing_status' => 'processing', 'processing_error' => null]);
 
         $payload = $rag->processDocument($document, $run->id);
-        $this->persistResult($run, $payload);
+        try {
+            $this->persistResult($run, $payload);
+        } catch (Throwable $exception) {
+            // FastAPI has already upserted Chroma vectors. Compensate before Laravel retries so no orphaned vectors leak.
+            try {
+                $rag->deleteDocumentVectors($document);
+            } catch (Throwable) {
+                // The original persistence failure is more actionable; failed() records a retryable state for the Lecturer.
+            }
+            throw $exception;
+        }
     }
 
     private function persistResult(DocumentProcessingRun $run, array $payload): void
@@ -85,6 +95,7 @@ class ProcessTeachingDocument implements ShouldQueue
                 DocumentVectorReference::create([
                     'document_chunk_id' => $storedChunk->id,
                     'provider' => 'chromadb',
+                    'embedding_model' => (string) ($payload['embedding_model'] ?? 'text-embedding-004'),
                     'collection' => (string) ($payload['vector_store']['collection'] ?? 'flts_document_chunks'),
                     'vector_id' => (string) $chunk['vector_id'],
                     'dimensions' => (int) ($chunk['dimensions'] ?? 768),

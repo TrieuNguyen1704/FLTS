@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class DocumentVectorReference extends Model
 {
-    protected $fillable = ['document_chunk_id', 'provider', 'collection', 'vector_id', 'dimensions'];
+    protected $fillable = ['document_chunk_id', 'provider', 'embedding_model', 'collection', 'vector_id', 'dimensions'];
 
     protected $casts = ['dimensions' => 'integer'];
 
