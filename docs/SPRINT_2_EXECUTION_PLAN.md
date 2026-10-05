@@ -17,15 +17,15 @@ Sprint 2 workbook xác định 09/10/2026–22/10/2026, 128 giờ, bốn thành 
 
 ### Hiện trạng source đã xác minh
 
-- Docker Compose hiện chỉ có `mysql`, `api`, `ai`, `web`; chưa có ChromaDB hoặc queue worker.
+- Docker Compose hiện có `mysql`, `api`, `ai`, `mailpit`, `web`; chưa có ChromaDB hoặc queue worker.
 - `ai-service` chỉ có `GET /health`; `requirements.txt` chỉ có FastAPI và Uvicorn.
 - Laravel upload file và metadata, luôn tạo `processing_status=uploaded_pending_processing`; chưa gọi FastAPI.
 - Chưa có job/queue config, processing-run model, extracted text, chunks, vector references, retrieval hoặc RAG endpoint.
 - MySQL hiện có `users`, `courses`, `course_enrollments`, `teaching_documents`.
 - Frontend chỉ hiển thị upload/list/delete và trạng thái hiện tại; chưa có retry, processing error, chunk summary hoặc retrieval test.
-- Test hiện có 4 PHPUnit feature tests/19 assertions cho Sprint 1; chưa có test AI pipeline.
-- `.github/workflows/ci.yml` dùng PHP 8.3, trong khi Docker API đã phải chuyển sang PHP 8.4 do dependency lock hiện yêu cầu PHP >= 8.4.1.
-- Git đang ở `main` nhưng **chưa có commit nào**; toàn bộ source là untracked. Chưa có bằng chứng remote, quyền truy cập thành viên, branch protection, pull request, review hoặc CI run.
+- Test hiện có 7 PHPUnit feature tests/50 assertions cho Sprint 1; chưa có test AI pipeline.
+- `.github/workflows/ci.yml` và Docker API hiện dùng PHP 8.4 phù hợp dependency lock.
+- Git đang sạch trên `main` tại merge commit `371ddca`; PR #4 (Google Mail SMTP/WelcomeMail) và PR #5 (Việt hóa UI) đã merge. Remote, PR workflow và CI foundation đã có bằng chứng; quyền clone/run trên từng máy thành viên vẫn cần xác nhận riêng.
 
 ## 2. Prerequisite Sprint 1 phải xử lý
 
@@ -99,8 +99,8 @@ processed -> processing     (explicit reprocess tạo run mới)
 
 ### Phase 4 — Embedding và ChromaDB
 
-- PB19: chọn một local embedding model sau decision gate; ghi model name/version và dimension.
-- PB20: ChromaDB chạy service riêng, volume riêng, collection được pin tên/version theo environment.
+- PB19: dùng Google Gemini `text-embedding-004` (768 dimensions); ghi provider/model/version/dimension và kiểm tra dimension response trước khi persist.
+- PB20: ChromaDB local chạy service riêng, volume riêng, collection được pin tên/version theo environment.
 - Vector ID phải deterministic theo run/config/chunk hoặc dùng UUID chunk đã lưu; retry dùng upsert, không tạo vector trùng.
 - MySQL giữ canonical chunk text và vector reference; Chroma giữ vector + metadata đủ để lọc theo course/document/run.
 
@@ -152,7 +152,7 @@ Success response:
   "parser": {"name": "TBD", "version": "TBD"},
   "extraction": {"page_count": 3, "char_count": 12000, "normalized_text": "..."},
   "chunk_config": {"version": "...", "size": 0, "overlap": 0, "unit": "TBD"},
-  "embedding": {"model": "TBD", "dimension": 0},
+  "embedding": {"provider": "google-gemini", "model": "text-embedding-004", "dimension": 768},
   "vector_store": {"provider": "chroma", "collection": "TBD"},
   "chunks": [
     {"index": 0, "text": "...", "content_hash": "...", "vector_id": "...", "source": {"page": 1}}
@@ -227,10 +227,10 @@ Phần này là kế hoạch, chưa cài package.
 | DOCX extraction | `python-docx` | Cách giữ paragraph/table/source locator |
 | Legacy DOC | LibreOffice Writer headless conversion hoặc `antiword` spike | Độ lớn image, fidelity, license, error handling; chọn một hoặc ghi limitation |
 | Chroma client | `chromadb` | Client/server version phải tương thích và được pin |
-| Local embedding | `sentence-transformers` hoặc thư viện tương ứng model đã duyệt | Exact model, dimension, download/cache, CPU/RAM, license |
+| Gemini embedding/generation | `google-genai` | Pin version; `GEMINI_API_KEY`; timeout/retry/rate-limit; embedding task type; JSON Schema/refusal/error behavior |
 | HTTP/config/test | `httpx`, `pydantic-settings`, `pytest` | Exact versions và test boundary |
 
-Không thêm LLM SDK khi provider/model chưa được phê duyệt. Không download model ngầm mỗi lần container start; cần model cache volume hoặc image strategy được ghi rõ sau spike.
+Provider/model đã được phê duyệt ngày 02/10/2026, nhưng chỉ thêm `google-genai` trên branch PB tương ứng cùng config/test/error handling. Không commit API key; ChromaDB vẫn phải pin image/client tương thích trước khi build.
 
 ## 8. Acceptance criteria mapping
 
@@ -299,7 +299,7 @@ Các mã dưới đây lấy từ User Story v1.1, không phải cột trong Spr
 - Laravel feature tests: owner trigger/retry/status/retrieval; other Lecturer/Student bị 403; document/run mismatch 404; validation top-k/query.
 - Queue tests: job success/failure/retry, FastAPI timeout/unavailable, malformed response, persistence failure sau vector upsert.
 - End-to-end Compose test: upload fixture → trigger → poll → processed → query → citation đúng source; và corrupt fixture → failed/error hiển thị.
-- Regression: 4 Sprint 1 tests/19 assertions và Vue build phải tiếp tục pass. Không dùng test database MySQL demo.
+- Regression: 7 Sprint 1 tests/50 assertions và Vue build phải tiếp tục pass. Không dùng test database MySQL demo.
 
 ### Evidence phải lưu cho Sprint Review
 
@@ -325,15 +325,15 @@ Các mã dưới đây lấy từ User Story v1.1, không phải cột trong Spr
 
 | Quyết định | Trạng thái/xung đột | Cần nhóm xác nhận trước |
 |---|---|---|
-| ChromaDB local | Sprint 2 workbook ghi cụ thể ChromaDB; master context vẫn ghi vector DB TBD | Chroma là lựa chọn demo Sprint 2 hay quyết định kiến trúc chính thức; pin image/client version |
-| Embedding model/provider | **Quyết định 26/09:** OpenAI `text-embedding-3-small`; workbook ghi local model nên thay đổi này phải được nêu rõ khi báo cáo | Default dimension 1536 hay dimension reduction, API key/billing limit, privacy, retry/timeout; không tải local model |
+| ChromaDB local | **Quyết định 02/10:** dùng ChromaDB local cho Sprint 2 | Pin image/client version, collection naming, healthcheck, persistence và cleanup lifecycle |
+| Embedding model/provider | **Quyết định 02/10:** Google Gemini `text-embedding-004`, 768 dimensions; thay thế OpenAI direction cũ | API key/billing/quota, privacy, task type, batch size, retry/timeout và kiểm tra dimension |
 | PDF parser | TBD | `pypdf` hoặc lựa chọn khác; scope encrypted/scanned PDF; OCR vẫn out of scope |
 | DOCX parser | TBD | `python-docx` hoặc lựa chọn khác; table/heading/source locator policy |
 | Legacy DOC | Spike bắt buộc | LibreOffice vs antiword; image size/fidelity; fallback/error message |
 | Chunking | TBD | Unit, size, overlap, sentence/paragraph fallback, config version |
 | Retrieval | TBD | Similarity metric, top-k default/max, score semantics, filters |
 | Re-ranking PB22 | Có trong Product Backlog nhưng không có task Sprint 2 workbook | Defer chính thức hay thêm scope/cắt task khác; không làm ngầm |
-| LLM/provider | **Quyết định 26/09:** OpenAI `gpt-4.1-mini` | API key/billing limit, privacy, timeout/retry, output JSON Schema và cách xử lý refusal/lỗi; chưa thêm SDK cho đến PB23 |
+| LLM/provider | **Quyết định 02/10:** Google Gemini `gemini-1.5-flash`; thay thế OpenAI direction cũ | API key/quota, privacy, timeout/retry, output JSON Schema và cách xử lý refusal/lỗi |
 | PB23 definition | Workbook chỉ evidence-only; US-38 yêu cầu LLM + structured output | Prototype-only hay cam kết full US-38 trong Sprint 2 |
 | Internal authentication | Chưa có | Shared service token, network isolation, secret management |
 | Queue | Chưa có | Database queue baseline, tries/backoff/timeout và failed-job handling |
@@ -360,4 +360,14 @@ Các dòng blocker ở phần 12 là snapshot tại thời điểm lập plan, k
 - Repository đã có remote GitHub, branch `main`, PR evidence và CI chạy xanh cho `backend`/`frontend`; workflow hiện dùng PHP 8.4. Một job `backend-quality` (PHP syntax lint) đã được thêm vào source và cần chạy xanh trên PR tiếp theo trước khi gắn vào ruleset required check.
 - Sprint 1 code closeout đã thêm registration, password recovery, account management, course update và document search/download. Xem `docs/SPRINT_1_CLOSEOUT_STATUS.md` để biết bằng chứng và giới hạn.
 - Sprint 1 chưa được phép gọi là hoàn tất toàn bộ: PB13 state transition/error vẫn là carry-over có chủ đích sang Sprint 2; Actual workbook và bằng chứng team-clone/PR review phải do nhóm bổ sung theo thực tế.
-- Quyết định OpenAI vẫn chỉ là direction đã ghi: `text-embedding-3-small` và `gpt-4.1-mini`. ChromaDB vẫn cần nhóm xác nhận và pin version; chưa có SDK/API key nào trong repository.
+- Quyết định ngày 02/10 thay thế OpenAI bằng Google Gemini: `text-embedding-004` (768 dimensions) và `gemini-1.5-flash`; ChromaDB local được chốt cho Sprint 2. Chưa có SDK/API key/Chroma service trong repository; package và image versions vẫn phải pin trên branch triển khai.
+
+## 14. Quyết định AI và điểm bắt đầu Sprint 2 — 02/10/2026
+
+- Provider chính thức: Google Gemini API. Embedding dùng `text-embedding-004` (768 dimensions); generation dùng `gemini-1.5-flash` với Structured Outputs / JSON Schema.
+- Vector store chính thức cho vertical slice: ChromaDB local, persistent volume và deterministic vector IDs.
+- Task matrix giữ nguyên tên task “Integrate local embedding model with ChromaDB” từ Sprint workbook để bảo toàn nguồn kế hoạch, nhưng quyết định triển khai mới dùng Gemini cloud embedding. Nhóm cần đồng bộ thay đổi này vào workbook/biên bản Sprint Planning; không được âm thầm coi wording cũ là đã khớp.
+- Secret dùng biến môi trường `GEMINI_API_KEY` trong `.env` bị ignore; không đặt key trong Compose, source, Markdown, test fixture hoặc CI log.
+- Bước code đầu tiên nên là một PR nền tảng PB13: tạo Laravel database queue/`queue-worker`, migration `document_processing_runs`, state/stage application enums, trigger/status API contract và test authorization/state transition. Email đồng bộ hiện tại có thể chuyển sang queue trong cùng nền tảng nhưng phải giữ behavior/test.
+- Song song sau khi contract PB13 ổn định: pin và thêm `pypdf`, `python-docx`, `google-genai`, `chromadb`, `httpx`, `pydantic-settings`, `pytest`; thêm Chroma service/version/healthcheck/volume; triển khai parser test-based trước embedding/generation.
+- Không đánh dấu RAG Done chỉ vì SDK gọi được. PB23 vẫn cần retrieved context, structured output validation, citations/grounding, error handling và bằng chứng end-to-end.
