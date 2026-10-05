@@ -36,7 +36,7 @@ class RagService
 
     public function search(Course $course, string $query, int $topK, array $documentIds = []): array
     {
-        return $this->unwrap($this->client()->post('/internal/v1/retrieval/search', [
+        return $this->unwrap($this->client()->asJson()->post('/internal/v1/retrieval/search', [
             'course_id' => $course->id,
             'query' => $query,
             'top_k' => $topK,
@@ -46,7 +46,7 @@ class RagService
 
     public function generateEvidence(Course $course, string $prompt, int $topK): array
     {
-        return $this->unwrap($this->client()->post('/internal/v1/evidence/generate', [
+        return $this->unwrap($this->client()->asJson()->post('/internal/v1/evidence/generate', [
             'course_id' => $course->id,
             'prompt' => $prompt,
             'top_k' => $topK,
@@ -62,7 +62,6 @@ class RagService
     {
         return Http::baseUrl(rtrim((string) config('rag.url'), '/'))
             ->acceptJson()
-            ->asJson()
             ->withToken((string) config('rag.token'))
             ->connectTimeout(5)
             ->timeout(180);

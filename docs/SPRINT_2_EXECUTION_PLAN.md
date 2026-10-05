@@ -385,7 +385,7 @@ Các dòng blocker ở phần 12 là snapshot tại thời điểm lập plan, k
 
 | Hạng mục | Lệnh/kết quả thực tế |
 |---|---|
-| Laravel regression + PB13/PB20/PB21 API | `docker compose exec -T api php vendor/bin/phpunit --testdox`: **15 tests, 79 assertions passed**. Includes ownership, queue/retry, safe terminal deletion/vector cleanup and public-error boundary checks. |
+| Laravel regression + PB13/PB20/PB21 API | `docker compose exec -T api php vendor/bin/phpunit --testdox`: **15 tests, 80 assertions passed**. Includes ownership, queue/retry, multipart Laravel→FastAPI processing contract, safe terminal deletion/vector cleanup and public-error boundary checks. |
 | FastAPI pipeline + local Chroma contract | `docker compose exec -T ai pytest -q`: **9 passed** (PDF, DOCX, DOC parser invocation/error mapping, cleaning, deterministic chunk/overlap, Chroma process/retrieve/course-filter/delete lifecycle with deterministic test vectors, and missing-service-token rejection). Đây không phải xác minh Gemini thật. |
 | Runtime services and persistence | `docker compose ps`: `api`, `ai`, `mysql`, `chroma`, `mailpit` healthy; `queue-worker`, `web` Up. Probe Chroma 768 chiều giữ `count=1` sau `docker compose restart chroma`, sau đó collection probe đã được xóa. |
 | Internal boundary | POST to FastAPI without Bearer service token returned **401**. |

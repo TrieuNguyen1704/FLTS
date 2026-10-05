@@ -92,6 +92,14 @@ class SprintTwoRagApiTest extends TestCase
         $this->assertDatabaseHas('document_extractions', ['document_processing_run_id' => $run->id, 'character_count' => 22]);
         $this->assertDatabaseHas('document_chunks', ['document_processing_run_id' => $run->id, 'source_locator' => 'page 1']);
         $this->assertDatabaseHas('document_vector_references', ['vector_id' => '1:1:0', 'embedding_model' => 'text-embedding-004', 'dimensions' => 768]);
+        Http::assertSent(function ($request) {
+            $contentType = $request->header('Content-Type');
+            return $request->method() === 'POST'
+                && str_ends_with($request->url(), '/internal/v1/documents/process')
+                && is_array($contentType)
+                && isset($contentType[0])
+                && str_starts_with($contentType[0], 'multipart/form-data;');
+        });
     }
 
     public function test_terminal_job_failure_marks_the_latest_document_run_as_retryable(): void
