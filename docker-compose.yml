@@ -76,6 +76,12 @@ services:
     depends_on:
       chroma:
         condition: service_healthy
+    healthcheck:
+      # This is a liveness check. Gemini configuration failures are reported by processing, not hidden at container start.
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health')\""]
+      interval: 5s
+      timeout: 3s
+      retries: 20
 
   queue-worker:
     build: ./backend
@@ -98,7 +104,7 @@ services:
       mysql:
         condition: service_healthy
       ai:
-        condition: service_started
+        condition: service_healthy
       api:
         condition: service_healthy
     volumes:

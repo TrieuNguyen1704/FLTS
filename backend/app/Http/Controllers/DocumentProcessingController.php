@@ -60,7 +60,8 @@ class DocumentProcessingController
         try {
             $results = $rag->search($course, $data['query'], $data['top_k'] ?? 5, $documentIds);
         } catch (\RuntimeException $exception) {
-            return response()->json(['message' => 'RAG retrieval is temporarily unavailable.', 'detail' => $exception->getMessage()], 503);
+            // FastAPI messages can contain deployment diagnostics; keep the browser response safe and stable.
+            return response()->json(['message' => 'RAG retrieval is temporarily unavailable.'], 503);
         }
         return response()->json($results);
     }
@@ -75,7 +76,7 @@ class DocumentProcessingController
         try {
             return response()->json($rag->generateEvidence($course, $data['prompt'], $data['top_k'] ?? 5));
         } catch (\RuntimeException $exception) {
-            return response()->json(['message' => 'Grounded evidence generation is temporarily unavailable.', 'detail' => $exception->getMessage()], 503);
+            return response()->json(['message' => 'Grounded evidence generation is temporarily unavailable.'], 503);
         }
     }
 

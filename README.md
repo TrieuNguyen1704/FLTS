@@ -27,7 +27,7 @@ docker compose up --build -d
 docker compose ps
 ```
 
-Chờ trạng thái `api`, `ai`, `web`, `mysql`, `mailpit` là running/healthy, rồi mở `http://localhost:8080`. Mailpit chỉ dùng cho email reset mật khẩu khi demo local tại `http://localhost:8025`.
+Chờ trạng thái `api`, `ai`, `chroma`, `mysql`, `mailpit` là healthy và `queue-worker`, `web` là running, rồi mở `http://localhost:8080`. Mailpit chỉ dùng cho email reset mật khẩu khi demo local tại `http://localhost:8025`.
 
 Tài khoản seed:
 

@@ -119,8 +119,8 @@ class ProcessTeachingDocument implements ShouldQueue
 
         $run->update([
             'status' => 'failed', 'stage' => 'failed', 'finished_at' => now(),
-            // Do not expose provider internals or a stack trace through the public API.
-            'error_detail' => ['message' => $exception->getMessage(), 'retryable' => true],
+            // Queue/provider exceptions remain in logs; the persisted run must stay safe to return to a Lecturer.
+            'error_detail' => ['code' => 'PROCESSING_FAILED', 'message' => 'Processing could not be completed.', 'retryable' => true],
         ]);
         if ($run->document && $run->document->latest_processing_run_id === $run->id) {
             $run->document->update([

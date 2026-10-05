@@ -110,6 +110,44 @@ class SprintTwoRagApiTest extends TestCase
         $this->assertSame('Processing failed. You can retry this document.', $document->fresh()->processing_error);
     }
 
+    public function test_processing_document_cannot_be_deleted_while_its_job_may_still_write_vectors(): void
+    {
+        [, $course, $document, $token] = $this->ownedDocument();
+        $document->update(['processing_status' => 'processing']);
+
+        $this->withToken($token)->deleteJson("/api/courses/{$course->id}/documents/{$document->id}")
+            ->assertStatus(409)
+            ->assertJsonPath('message', 'This document is currently being processed and cannot be deleted yet.');
+
+        $this->assertDatabaseHas('teaching_documents', ['id' => $document->id]);
+    }
+
+    public function test_terminal_document_deletion_requires_vector_cleanup_first(): void
+    {
+        [, $course, $document, $token] = $this->ownedDocument();
+        $document->update(['processing_status' => 'failed']);
+        Http::fake(['*' => Http::response(['deleted' => true], 200)]);
+
+        $this->withToken($token)->deleteJson("/api/courses/{$course->id}/documents/{$document->id}")
+            ->assertOk()
+            ->assertJsonPath('message', 'Document deleted.');
+
+        Http::assertSent(fn ($request) => $request->method() === 'DELETE'
+            && str_ends_with($request->url(), "/internal/v1/documents/{$document->id}/vectors"));
+        $this->assertDatabaseMissing('teaching_documents', ['id' => $document->id]);
+    }
+
+    public function test_public_rag_errors_do_not_return_fastapi_diagnostics(): void
+    {
+        [, $course, , $token] = $this->ownedDocument();
+        Http::fake(['*' => Http::response(['detail' => ['message' => 'internal host and provider detail']], 503)]);
+
+        $this->withToken($token)->postJson("/api/courses/{$course->id}/retrieval-tests", ['query' => 'Find the source'])
+            ->assertStatus(503)
+            ->assertJsonPath('message', 'RAG retrieval is temporarily unavailable.')
+            ->assertJsonMissingPath('detail');
+    }
+
     private function ownedDocument(): array
     {
         $lecturer = User::create(['name' => 'Lecturer', 'email' => 'owner@test.dev', 'password' => bcrypt('Password123!'), 'role' => 'lecturer']);
