@@ -4,6 +4,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\AdminUserController;
 use App\Http\Controllers\CourseController;
 use App\Http\Controllers\DocumentController;
+use App\Http\Controllers\DocumentProcessingController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/health', fn () => response()->json(['status' => 'ok', 'service' => 'laravel-api']));
@@ -28,4 +29,10 @@ Route::middleware('auth.token')->group(function () {
     Route::post('/courses/{course}/documents', [DocumentController::class, 'store'])->middleware('role:lecturer');
     Route::get('/courses/{course}/documents/{document}/download', [DocumentController::class, 'download'])->middleware('role:lecturer');
     Route::delete('/courses/{course}/documents/{document}', [DocumentController::class, 'destroy'])->middleware('role:lecturer');
+    // Sprint 2 RAG calls are lecturer-owned course operations; FastAPI is never exposed directly to browsers.
+    Route::post('/courses/{course}/documents/{document}/processing-runs', [DocumentProcessingController::class, 'start'])->middleware('role:lecturer');
+    Route::post('/courses/{course}/documents/{document}/processing-runs/retry', [DocumentProcessingController::class, 'retry'])->middleware('role:lecturer');
+    Route::get('/courses/{course}/documents/{document}/processing', [DocumentProcessingController::class, 'show'])->middleware('role:lecturer');
+    Route::post('/courses/{course}/retrieval-tests', [DocumentProcessingController::class, 'search'])->middleware('role:lecturer');
+    Route::post('/courses/{course}/evidence-prototypes', [DocumentProcessingController::class, 'generateEvidence'])->middleware('role:lecturer');
 });

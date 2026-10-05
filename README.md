@@ -6,6 +6,12 @@ Xem [hướng dẫn đọc toàn bộ codebase bằng tiếng Việt](docs/CODEB
 
 Trạng thái closeout có bằng chứng thực tế, giới hạn còn lại và điểm bắt đầu Sprint 2: [docs/SPRINT_1_CLOSEOUT_STATUS.md](docs/SPRINT_1_CLOSEOUT_STATUS.md).
 
+## Sprint 2 RAG vertical slice (05/10/2026)
+
+Sprint 2 is in implementation, not complete. The current branch adds a real Laravel database queue/worker, FastAPI PDF/DOCX parser, text cleaning/chunking, local ChromaDB, Gemini embedding/generation integration, and Lecturer-only retrieval/evidence APIs. See [the execution-plan progress log](docs/SPRINT_2_EXECUTION_PLAN.md).
+
+After `Copy-Item .env.example .env`, edit the ignored `.env` and set a newly generated `GEMINI_API_KEY`; the key must never be committed. Also replace `AI_SERVICE_TOKEN` with a local random value. Without the Gemini key all containers still start, but document processing and RAG intentionally return a configuration error instead of pretending they succeeded.
+
 ## Yêu cầu
 
 - Windows 10/11 với Docker Desktop đang chạy và Docker Compose v2.

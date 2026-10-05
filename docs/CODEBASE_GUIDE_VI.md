@@ -193,3 +193,11 @@ Luồng token reset cần hiểu theo thứ tự: request hợp lệ luôn trả
 `account_status` không chỉ là nút UI: `AuthenticateToken` từ chối và xóa token của user suspended; `AuthController@login` cũng trả 403. Admin không thể tự đổi role/status của mình và không thể bỏ/suspend Admin active cuối cùng.
 
 Tình trạng document vẫn phải trình bày chính xác: file được lưu và metadata/list/search/download hoạt động, nhưng `uploaded_pending_processing` không phải state machine hay kết quả pipeline. Extraction/error/retry/RAG thuộc Sprint 2.
+
+## 13. Cập nhật đường đọc Sprint 2 (05/10/2026)
+
+Để đọc vertical slice RAG hiện tại, đi theo thứ tự: `docker-compose.yml` (worker/Chroma/env) → `backend/routes/api.php` → `DocumentProcessingController` → `ProcessTeachingDocument` → `RagService` → `ai-service/main.py` → `ai-service/rag_pipeline.py` → `frontend/src/services/ragService.js` → `CourseDetailView.vue`.
+
+Các bảng mới cần hiểu là `document_processing_runs` (mỗi lần thử), `document_extractions` (text đã chuẩn hóa), `document_chunks` (đoạn + hash/source), và `document_vector_references` (liên kết chunk MySQL với vector Chroma). `TeachingDocument.latest_processing_run_id` chỉ là con trỏ để UI poll nhanh, không thay thế lịch sử runs.
+
+Đây là implementation checkpoint, không phải tuyên bố RAG hoàn thành: chưa có Gemini key mới để xác minh E2E thật; legacy DOC/OCR/evaluation/quiz/publish/analytics vẫn chưa có. Xem `docs/SPRINT_2_EXECUTION_PLAN.md` để biết evidence đã chạy và các blocker.

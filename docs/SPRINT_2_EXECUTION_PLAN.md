@@ -371,3 +371,33 @@ Các dòng blocker ở phần 12 là snapshot tại thời điểm lập plan, k
 - Bước code đầu tiên nên là một PR nền tảng PB13: tạo Laravel database queue/`queue-worker`, migration `document_processing_runs`, state/stage application enums, trigger/status API contract và test authorization/state transition. Email đồng bộ hiện tại có thể chuyển sang queue trong cùng nền tảng nhưng phải giữ behavior/test.
 - Song song sau khi contract PB13 ổn định: pin và thêm `pypdf`, `python-docx`, `google-genai`, `chromadb`, `httpx`, `pydantic-settings`, `pytest`; thêm Chroma service/version/healthcheck/volume; triển khai parser test-based trước embedding/generation.
 - Không đánh dấu RAG Done chỉ vì SDK gọi được. PB23 vẫn cần retrieved context, structured output validation, citations/grounding, error handling và bằng chứng end-to-end.
+
+## 15. Cập nhật triển khai thực tế — 05/10/2026
+
+### Đã triển khai trên `feature/sprint2-rag-vertical-slice`
+
+- Docker Compose có thêm `queue-worker` và `chroma` (volume `chroma_data`); `api` chạy migration/seed rồi healthcheck, worker chỉ chạy sau khi API healthy. Điều này sửa race condition migration đã quan sát khi hai service cùng migrate.
+- Laravel có database queue, state/run schema, job `ProcessTeachingDocument`, FastAPI client service, API trigger/retry/status/retrieval/evidence và check Lecturer ownership ở backend. Vue Course Detail dùng API thật để trigger/poll trạng thái, xem chunks count, truy xuất Top-K và xem evidence/citations.
+- FastAPI có parser PDF text-based/DOCX, xử lý lỗi có mã/stage, cleaning, deterministic paragraph-window chunking, Gemini embedding 768 chiều, Chroma upsert/delete/search theo course/document metadata và evidence generation có validate citation thuộc tập retrieved context.
+- Versions pinned: Chroma image/client `0.5.23`; `pypdf 5.0.1`; `python-docx 1.1.2`; `google-genai 2.28.0`; `pytest 8.3.3`. SDK 2.x dùng `GenerateContentConfig.response_schema` cho structured JSON; không dùng package cũ không có trường này.
+
+### Evidence đã chạy
+
+| Hạng mục | Lệnh/kết quả thực tế |
+|---|---|
+| Laravel regression + PB13 API | `docker compose exec -T api php vendor/bin/phpunit --testdox`: **10 tests, 62 assertions passed**. |
+| FastAPI pure pipeline | `docker compose exec -T ai pytest -q`: **6 passed** (PDF, DOCX, cleaning, deterministic chunk/overlap, legacy DOC failure). |
+| Runtime services | `docker compose ps`: `api` healthy; `queue-worker`, `ai`, `chroma`, `mysql`, `mailpit`, `web` Up. |
+| Internal boundary | POST to FastAPI without Bearer service token returned **401**. |
+
+### Không được đánh dấu Done tại checkpoint này
+
+- Key Gemini đã được gửi qua chat nên phải revoke/rotate. Vì không có key mới trong ignored `.env`, chưa có bằng chứng chạy provider thật cho embedding/generation, chưa có vector persistence-after-restart, retrieval isolation fixture, hay evidence output thật.
+- PDF/DOCX happy-path, corrupt/empty/encrypted fixtures và error persistence cần thêm test matrix. Legacy `.doc` hiện fail rõ ràng, không phải converter; PB16 chưa đạt AC nếu workbook yêu cầu DOC xử lý thật.
+- Không có OCR, re-ranking, benchmark/evaluation, rate limit, virus scan, quiz/publish/analytics. Không tự sửa workbook hay điền Actual hours.
+
+### Bước tiếp theo bắt buộc trước khi báo PB RAG complete
+
+1. Project lead tạo **Gemini key mới**, đặt `GEMINI_API_KEY=...` chỉ trong `.env`, thay `AI_SERVICE_TOKEN`, rồi `docker compose up --build -d`.
+2. Upload một PDF text-based và DOCX không nhạy cảm; trigger RAG trong Lecturer UI; lưu run ID, trạng thái processed, chunk count, Chroma result, retrieval citations và structured evidence response làm evidence.
+3. Restart `ai`/`chroma`, rerun retrieval; thêm fixtures + tests cho PDF/DOCX/error/filter/delete lifecycle trước Sprint Review.

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Course;
 use App\Models\TeachingDocument;
+use App\Services\RagService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -55,10 +56,18 @@ class DocumentController
         return Storage::disk('local')->download($document->stored_path, $document->original_name);
     }
 
-    public function destroy(Request $request, Course $course, TeachingDocument $document): JsonResponse
+    public function destroy(Request $request, Course $course, TeachingDocument $document, RagService $rag): JsonResponse
     {
         $this->ensureOwner($request, $course);
         abort_unless($document->course_id === $course->id, 404);
+        if ($document->processing_status === 'processed') {
+            try {
+                // Delete indexed chunks first so a removed source cannot remain retrievable from ChromaDB.
+                $rag->deleteDocumentVectors($document);
+            } catch (\RuntimeException $exception) {
+                return response()->json(['message' => 'Document deletion is paused because vector cleanup is unavailable.'], 503);
+            }
+        }
         Storage::disk('local')->delete($document->stored_path);
         $document->delete();
         return response()->json(['message' => 'Document deleted.']);
