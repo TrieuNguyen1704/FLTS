@@ -76,3 +76,15 @@ Khi **Codex** tiếp nhận công việc, hãy chú ý các định hướng ti�
    * **Task 1 (Queue Worker):** Hiện tại email gửi đồng bộ (sync) nên request API mất ~1-2s chờ Google SMTP. Bước tiếp theo nên cấu hình `queue-worker` trong `docker-compose.yml` (`php artisan queue:work`) và chuyển `Mail::to()->send()` sang `Mail::to()->queue()`. Queue này cũng sẽ dùng cho pipeline xử lý tài liệu Sprint 2.
    * **Task 2 (PB13 State Machine & Schema):** Tạo migration cho `document_processing_runs` (lưu các stage: `queued`, `extracting`, `cleaning`, `chunking`, `embedding`, `persisting`).
    * **Task 3 (PB15/PB16 Text Extraction):** Triển khai trích xuất văn bản trong `ai-service` bằng `pypdf` (PDF text-based) và `python-docx` (DOCX).
+
+---
+
+## 4. Codex verification & AI decision update — 02/10/2026
+
+- Đã đọc toàn bộ handoff, master context, codebase guide và Sprint 2 execution plan; không triển khai feature/package Sprint 2 trong phiên xác minh này.
+- Git sạch trên `main` tại `371ddca`; PR #4 và PR #5 đã merge.
+- Đã xác minh source Gmail SMTP/`WelcomeMail`, fallback Mailpit, UI tiếng Việt và login không còn nút/text tài khoản demo.
+- `docker compose ps` xác nhận `api`, `web`, `mysql`, `mailpit`, `ai` đều Up; MySQL và Mailpit healthy.
+- PHPUnit trong API container pass **7 tests, 50 assertions**. Con số 49 trong snapshot cũ đã tăng một assertion do test `WelcomeMail` của PR #4.
+- Quyết định mới của project lead: Google Gemini thay OpenAI cho Sprint 2 — embedding `text-embedding-004` (768 dimensions), generation `gemini-1.5-flash`; ChromaDB local là vector store chính thức của vertical slice.
+- Không ghi Gemini API key vào tài liệu hoặc source. `PROJECT_CONTEXT.md` và `docs/SPRINT_2_EXECUTION_PLAN.md` đã được đồng bộ quyết định; package/image versions và các tham số còn TBD phải được pin khi bắt đầu branch triển khai.

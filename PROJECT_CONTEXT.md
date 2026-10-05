@@ -1,7 +1,7 @@
 # FLTS Project Master Context / AI Agent Handoff
 
 > Purpose: This file is the single handoff context for any AI agent joining the FLTS project. Read it before proposing changes, writing code, updating documents, designing experiments, or planning sprints.
-> Snapshot date: 2026-09-25.
+> Initial snapshot date: 2026-09-25. Latest repository verification/decision update: 2026-10-02.
 
 ## 0. Agent Operating Rules
 
@@ -127,8 +127,8 @@ Critical invariant: **Students must never see draft learning objects.**
 | Application Backend | Laravel / PHP |
 | AI Service | Python / FastAPI |
 | Relational DB | MySQL |
-| Vector Storage | Final technology TBD after technical evaluation |
-| External AI | Cloud embedding + LLM services; provider/model TBD unless formally selected later |
+| Vector Storage | ChromaDB local for the Sprint 2 vertical slice; image/client versions must be pinned before implementation |
+| External AI | Google Gemini API: `text-embedding-004` (768 dimensions) and `gemini-1.5-flash` |
 | DevOps | Docker / Docker Compose, Git/GitHub, CI/CD foundation |
 | Tools | Trello, Zalo, Google Drive, Postman, MySQL Workbench, VS Code |
 
@@ -210,9 +210,6 @@ Research decisions still TBD unless separately approved:
 - Ground-truth annotation/verification procedure.
 - Exact baselines (minimum requirement exists, exact configurations need formalization).
 - Exact proposed method/contribution.
-- Exact embedding model.
-- Exact LLM/provider.
-- Exact vector DB.
 - Exact metrics and thresholds.
 - Exact chunk sizes/overlap/top-k/reranking configuration.
 
@@ -919,8 +916,8 @@ These items should be reconciled in future document revisions:
 1. **Project title inconsistency:** Project Plan project-information table uses `Teaching And Learning Support System Based On The Flipped-Learning Method`, while covers/User Story use `FLTS: A RAG-Based Learning Content Generation Platform for Flipped Learning`. Prefer the latter as the current public title unless the mentor instructs otherwise.
 2. **User Story version display:** cover shows Version 1.0/date 2026-09-22, but revision history contains v1.1 dated 2026-09-24 correcting PB↔US traceability. Treat v1.1 mapping as current.
 3. **Budget supersession:** older Proposal estimate differed; current Project Plan states USD 2,120.
-4. **Vector DB:** not final. Do not state Pinecone/Chroma/Milvus as selected without a formal decision.
-5. **AI model/provider:** not final unless a later technical decision records it.
+4. **Vector DB:** this was historically TBD; the later 2026-10-02 decision in section 28 selects local ChromaDB for Sprint 2.
+5. **AI model/provider:** this was historically TBD, and the OpenAI direction recorded on 2026-09-26 was later superseded by the Google Gemini decision in section 28.
 6. **Research dataset:** source direction is DTU teaching materials per conversation, but exact corpus/sample/ground-truth procedure remains to be documented.
 7. **Sprint Actual data:** uploaded Sprint 1 workbook has planned values but no actual task progress filled in yet.
 
@@ -958,12 +955,13 @@ These items should be reconciled in future document revisions:
 - Basic analytics only.
 - Research requires dataset, ground truth, baseline/proposed comparison, metrics, logs, ablation.
 - Dataset source direction: authorized DTU teaching materials (chat-confirmed).
+- Sprint 2 AI provider: Google Gemini API.
+- Sprint 2 embedding model: `text-embedding-004` with 768 dimensions.
+- Sprint 2 generation model: `gemini-1.5-flash` with Structured Outputs / JSON Schema validation required.
+- Sprint 2 vector store: local ChromaDB.
 
 ### TBD / must not be invented
 
-- Vector database final choice.
-- LLM provider/model.
-- Embedding provider/model.
 - Exact parsing libraries.
 - Exact chunking strategy and parameters.
 - Exact retrieval similarity metric/top-k.
@@ -1080,6 +1078,8 @@ FLTS is not 'an AI that replaces lecturers'. It is a document-grounded learning-
 
 ## 26. Sprint 2 AI Provider Decision — 2026-09-26
 
+> **Superseded on 2026-10-02:** section 28 replaces this OpenAI direction with the confirmed Google Gemini + local ChromaDB decision. This section is retained as decision history.
+
 - The project lead selected the **OpenAI API direction** for the Sprint 2 RAG vertical slice. This supersedes the previously open provider decision only; it does not make Sprint 2 functionality complete.
 - Planned embedding model: `text-embedding-3-small` (default 1536 dimensions unless a documented, tested dimension reduction is adopted).
 - Planned generation model: `gpt-4.1-mini`, with Structured Outputs/JSON Schema validation required before US-38/PB23 can be reported as complete.
@@ -1099,3 +1099,14 @@ This is a repository-verified implementation update, not an assertion that every
 - PB13/US-13 must remain **partial**: metadata and accurate `uploaded_pending_processing` display exist, but no extractor/worker/pipeline can transition status or persist a processing error. Those missing acceptance criteria are explicit Sprint 2 PB13 carry-over, not a completed RAG claim.
 - The local Excel lock file pattern `docs/reference/~$*.xlsx` is ignored. No source Word/Excel plan was edited and no `Actual` time was filled.
 - The canonical current handoff/status document is `docs/SPRINT_1_CLOSEOUT_STATUS.md`.
+
+## 28. Sprint 2 Gemini and Vector Store Decision — 2026-10-02
+
+- The project lead formally selected the **Google Gemini API** for the Sprint 2 RAG vertical slice, superseding the OpenAI direction recorded in section 26.
+- Embedding model: `text-embedding-004`, with an expected vector dimension of **768**. The implementation must validate the returned dimension and persist provider/model/dimension metadata with processing runs and vector references.
+- Generation model: `gemini-1.5-flash`. Structured Outputs / JSON Schema validation and explicit generation-error handling remain required before PB23/US-38 can be reported as complete.
+- Vector store: **local ChromaDB** in Docker Compose with a persistent volume, healthcheck, pinned image/client versions, deterministic vector IDs and lifecycle handling for retry/reprocess/delete.
+- Python SDK direction: `google-genai`. Exact package versions for `google-genai`, `pypdf`, `python-docx`, `chromadb`, `httpx`, `pydantic-settings` and `pytest` must be pinned when the implementation branch starts.
+- The Gemini API key must exist only in an ignored local `.env` and be passed to the AI container through environment variables. Never commit, log, screenshot or copy the key into Markdown, source, fixtures or CI output.
+- This decision selects provider/models/vector store only. Queue design parameters, parser versions, legacy DOC strategy, chunk size/overlap, retrieval top-k/metric, re-ranking scope, rate limits, retry/backoff and evaluation thresholds remain to be confirmed or tested.
+- Repository verification on 2026-10-02 found `main` clean at merge commit `371ddca`; PR #4 (Google Mail SMTP/WelcomeMail) and PR #5 (Vietnamese production UI) are merged. Docker showed `api`, `web`, `mysql`, `mailpit`, and `ai` running, with MySQL/Mailpit healthy. PHPUnit passed **7 tests and 50 assertions**.
