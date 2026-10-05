@@ -213,7 +213,7 @@ onMounted(loadCourse)
     </section>
     <section class="notice-banner">
       <strong>Quy trình tài liệu</strong>
-      <span>Tài liệu sau khi tải lên sẽ ở trạng thái <b>Chờ xử lý</b> để chuẩn bị cho quy trình trích xuất và tạo học liệu thông minh.</span>
+      <span>Tài liệu mới tải lên ở trạng thái <b>Chờ xử lý</b>. Chọn <b>Xử lý RAG</b> để đưa tài liệu vào hàng đợi trích xuất, chia đoạn và lập chỉ mục; chỉ tài liệu xử lý thành công mới có thể truy xuất.</span>
     </section>
     <section class="content-section">
       <header class="section-header">
