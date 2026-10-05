@@ -64,7 +64,7 @@ class RagService
             ->acceptJson()
             ->withToken((string) config('rag.token'))
             ->connectTimeout(5)
-            ->timeout(180);
+            ->timeout(600);
     }
 
     private function unwrap(Response $response, string $operation): array

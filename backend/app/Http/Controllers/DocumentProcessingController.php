@@ -91,7 +91,12 @@ class DocumentProcessingController
                 'status' => 'queued',
                 'stage' => 'queued',
                 // Versioned input makes later parser/chunk changes auditable rather than silently altering a run.
-                'pipeline_config' => ['parser' => 'pypdf/python-docx', 'chunking' => 'paragraph-window-v1', 'embedding_model' => 'text-embedding-004'],
+                'pipeline_config' => [
+                    'parser' => 'pypdf/python-docx',
+                    'chunking' => 'paragraph-window-v1',
+                    // Record the selected model with each run so environment changes do not rewrite history.
+                    'embedding_model' => (string) config('rag.embedding_model'),
+                ],
             ]);
             $document->update([
                 'latest_processing_run_id' => $run->id,

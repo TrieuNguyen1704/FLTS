@@ -200,4 +200,10 @@ Tình trạng document vẫn phải trình bày chính xác: file được lưu 
 
 Các bảng mới cần hiểu là `document_processing_runs` (mỗi lần thử), `document_extractions` (text đã chuẩn hóa), `document_chunks` (đoạn + hash/source), và `document_vector_references` (liên kết chunk MySQL với vector Chroma). `TeachingDocument.latest_processing_run_id` chỉ là con trỏ để UI poll nhanh, không thay thế lịch sử runs.
 
-Đây là implementation checkpoint, không phải tuyên bố RAG hoàn thành: chưa có Gemini key mới để xác minh E2E thật; legacy DOC dùng `antiword` nhưng chưa có fixture DOC thật để xác minh fidelity; OCR/evaluation/quiz/publish/analytics vẫn chưa có. Xem `docs/SPRINT_2_EXECUTION_PLAN.md` để biết evidence đã chạy và các blocker.
+Đây là implementation checkpoint, không phải tuyên bố RAG hoàn thành: local runtime đã xử lý thành công các PDF có thật bằng `gemini-embedding-2` (768 chiều) và `gemini-2.5-flash`, nhưng DOCX cần được chạy lại để lưu evidence độc lập; legacy DOC dùng `antiword` nhưng chưa có fixture DOC thật để xác minh fidelity; OCR/evaluation/quiz/publish/analytics vẫn chưa có. Xem `docs/SPRINT_2_EXECUTION_PLAN.md` và `docs/SPRINT_2_E2E_EVIDENCE.md` để biết evidence đã chạy và các blocker.
+
+## 14. Bổ sung: batching và rate limit Gemini (05/10/2026)
+
+Trong `ai-service/main.py`, hàm `embed()` không gửi toàn bộ document trong một request: nó chia chunk theo `GEMINI_EMBEDDING_BATCH_SIZE` (mặc định 40), tạo một `types.Content` cho mỗi chunk, rồi gọi Gemini theo từng batch. Nếu provider trả `429`/`RESOURCE_EXHAUSTED`, `extract_retry_delay()` đọc gợi ý thời gian chờ, giới hạn trong 15–60 giây và thử lại tối đa `GEMINI_EMBEDDING_MAX_RETRIES` lần (mặc định 15). Việc này nhằm tránh payload quá lớn và không biến rate limit tạm thời thành `processed` giả.
+
+`ProcessTeachingDocument::$timeout`, queue-worker `--timeout` và HTTP client đều đang là 600 giây để phù hợp với retry. Đây là thông số demo, không phải SLA production; file rất lớn vẫn có thể cần hàng đợi/timeout policy riêng. Khi lỗi provider xảy ra, FastAPI log chi tiết nội bộ nhưng trả Laravel một thông điệp an toàn, nhờ vậy UI không hiển thị raw provider diagnostics.

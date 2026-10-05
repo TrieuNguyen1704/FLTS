@@ -8,7 +8,7 @@ Trạng thái closeout có bằng chứng thực tế, giới hạn còn lại v
 
 ## Sprint 2 RAG vertical slice (05/10/2026)
 
-Sprint 2 is in implementation, not complete. The current branch adds a real Laravel database queue/worker, FastAPI PDF/DOCX parser, text cleaning/chunking, local ChromaDB, Gemini embedding/generation integration, and Lecturer-only retrieval/evidence APIs. See [the execution-plan progress log](docs/SPRINT_2_EXECUTION_PLAN.md).
+Sprint 2 is in implementation, not complete. The current branch adds a real Laravel database queue/worker, FastAPI PDF/DOC/DOCX parser, text cleaning/chunking, local ChromaDB, Gemini embedding/generation integration, and Lecturer-only retrieval/evidence APIs. The current runtime uses `gemini-embedding-2` with 768-dimensional vectors and `gemini-2.5-flash`; batching and bounded rate-limit retry are configured for document embedding. See [the execution-plan progress log](docs/SPRINT_2_EXECUTION_PLAN.md).
 
 For the repeatable live-provider verification procedure and the record fields required at Sprint Review, use [the Sprint 2 E2E evidence runbook](docs/SPRINT_2_E2E_EVIDENCE.md).
 
@@ -75,7 +75,7 @@ Sau reset, chạy lại `docker compose up --build -d`; migration và seeder s�
 
 - Upload giới hạn 10 MB mặc định (`DOCUMENT_MAX_KB=10240` trong `.env`), chỉ chấp nhận phần mở rộng PDF/DOC/DOCX.
 - Trạng thái `uploaded_pending_processing` nghĩa là tệp đã lưu nhưng **chưa** được trích xuất, chunk, embedding hoặc RAG xử lý.
-- Sprint 2 đã chọn Google Gemini (`text-embedding-004`, `gemini-1.5-flash`) và ChromaDB local. Một key Gemini mới, chỉ đặt trong `.env` bị Git ignore, vẫn là điều kiện bắt buộc trước khi có thể xác minh RAG E2E thật.
+- Sprint 2 dùng Google Gemini (`gemini-embedding-2`, vector 768 chiều; `gemini-2.5-flash`) và ChromaDB local. Một `GEMINI_API_KEY` hợp lệ cùng `AI_SERVICE_TOKEN` riêng chỉ được đặt trong `.env` bị Git ignore. Không commit hoặc chia sẻ lại secret; nếu key từng được gửi qua chat, hãy rotate nó trong Google AI Studio.
 - API dùng bearer token có hiệu lực đến đăng xuất hoặc lần đăng nhập mới của cùng tài khoản. Đây là lựa chọn tối thiểu cho demo, không phải cơ chế production.
 
 ## Cấu trúc

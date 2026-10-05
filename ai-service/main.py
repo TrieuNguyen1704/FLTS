@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
+import re
+import time
 from typing import Annotated, Any
 
 import chromadb
@@ -16,9 +19,12 @@ from rag_pipeline import PipelineError, chunk_text, extract_document
 APP = FastAPI(title='FLTS AI Service', version='0.2.0')
 # Keep the conventional ASGI export expected by the Docker uvicorn command.
 app = APP
+LOGGER = logging.getLogger(__name__)
 COLLECTION_NAME = os.getenv('CHROMA_COLLECTION', 'flts_document_chunks')
-EMBEDDING_MODEL = os.getenv('GEMINI_EMBEDDING_MODEL', 'text-embedding-004')
-GENERATION_MODEL = os.getenv('GEMINI_GENERATION_MODEL', 'gemini-1.5-flash')
+EMBEDDING_MODEL = os.getenv('GEMINI_EMBEDDING_MODEL', 'gemini-embedding-2')
+GENERATION_MODEL = os.getenv('GEMINI_GENERATION_MODEL', 'gemini-2.5-flash')
+EMBEDDING_BATCH_SIZE = int(os.getenv('GEMINI_EMBEDDING_BATCH_SIZE', '40'))
+EMBEDDING_MAX_RETRIES = int(os.getenv('GEMINI_EMBEDDING_MAX_RETRIES', '15'))
 
 
 @APP.exception_handler(PipelineError)
@@ -47,17 +53,65 @@ def chroma_collection():
         raise PipelineError('VECTOR_STORE_UNAVAILABLE', 'ChromaDB is not available.', 'vectorizing', 503) from exc
 
 
+def extract_retry_delay(err_str: str) -> float:
+    match = re.search(r'retry in\s+([0-9.]+)\s*s', err_str, re.IGNORECASE)
+    if match:
+        try:
+            return min(60.0, max(15.0, float(match.group(1)) + 2.0))
+        except ValueError:
+            pass
+    match_delay = re.search(r'retryDelay[\'":\s]+([0-9.]+)', err_str, re.IGNORECASE)
+    if match_delay:
+        try:
+            return min(60.0, max(15.0, float(match_delay.group(1)) + 2.0))
+        except ValueError:
+            pass
+    return 35.0
+
+
 def embed(contents: list[str], task_type: str) -> list[list[float]]:
+    if not contents:
+        return []
+    config_kwargs: dict[str, Any] = {'task_type': task_type}
+    if 'gemini-embedding' in EMBEDDING_MODEL:
+        config_kwargs['output_dimensionality'] = 768
+    client = gemini_client()
+    vectors: list[list[float]] = []
+    batch_size = EMBEDDING_BATCH_SIZE
+    total_batches = (len(contents) + batch_size - 1) // batch_size
     try:
-        response = gemini_client().models.embed_content(
-            model=EMBEDDING_MODEL,
-            contents=contents,
-            config=types.EmbedContentConfig(task_type=task_type),
-        )
-        vectors = [list(item.values) for item in response.embeddings]
+        for idx in range(0, len(contents), batch_size):
+            batch = contents[idx:idx + batch_size]
+            batch_num = idx // batch_size + 1
+            print(f'Embedding batch {batch_num}/{total_batches} ({len(batch)} items)...', flush=True)
+            formatted_contents = [types.Content(parts=[types.Part.from_text(text=item)]) for item in batch]
+            max_retries = EMBEDDING_MAX_RETRIES
+            for attempt in range(max_retries):
+                try:
+                    response = client.models.embed_content(
+                        model=EMBEDDING_MODEL,
+                        contents=formatted_contents,
+                        config=types.EmbedContentConfig(**config_kwargs),
+                    )
+                    for item in response.embeddings:
+                        vectors.append(list(item.values))
+                    time.sleep(1.0)
+                    break
+                except Exception as exc:
+                    err_str = str(exc)
+                    if 'RESOURCE_EXHAUSTED' in err_str or '429' in err_str:
+                        delay = extract_retry_delay(err_str)
+                        print(f'Rate limit reached on batch {batch_num} (attempt {attempt + 1}/{max_retries}). Waiting {delay:.1f}s...', flush=True)
+                        time.sleep(delay)
+                    else:
+                        raise
+            else:
+                raise RuntimeError(f'Failed to embed batch {batch_num} after {max_retries} attempts.')
     except PipelineError:
         raise
     except Exception as exc:
+        # Keep provider diagnostics in internal logs instead of returning them to Laravel for persistence.
+        LOGGER.exception('Gemini embedding request failed')
         raise PipelineError('EMBEDDING_FAILED', 'Gemini could not create document embeddings.', 'embedding', 502) from exc
     if len(vectors) != len(contents) or any(len(vector) != 768 for vector in vectors):
         raise PipelineError('EMBEDDING_DIMENSION_INVALID', 'Gemini did not return the expected 768-dimensional embeddings.', 'embedding', 502)
@@ -176,7 +230,8 @@ def generate_evidence(request: EvidenceRequest) -> dict[str, Any]:
         f'\n\nQuestion: {request.prompt}\n\nSource chunks:\n{context}'
     )
     try:
-        response = gemini_client().models.generate_content(
+        client = gemini_client()
+        response = client.models.generate_content(
             model=GENERATION_MODEL,
             contents=instruction,
             # google-genai 2.x calls this response_schema; it constrains the provider output before validation below.

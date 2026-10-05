@@ -20,7 +20,7 @@ class ProcessTeachingDocument implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 3;
-    public int $timeout = 180;
+    public int $timeout = 600;
 
     public function __construct(public int $runId)
     {
@@ -95,7 +95,7 @@ class ProcessTeachingDocument implements ShouldQueue
                 DocumentVectorReference::create([
                     'document_chunk_id' => $storedChunk->id,
                     'provider' => 'chromadb',
-                    'embedding_model' => (string) ($payload['embedding_model'] ?? 'text-embedding-004'),
+                    'embedding_model' => (string) ($payload['embedding_model'] ?? config('rag.embedding_model')),
                     'collection' => (string) ($payload['vector_store']['collection'] ?? 'flts_document_chunks'),
                     'vector_id' => (string) $chunk['vector_id'],
                     'dimensions' => (int) ($chunk['dimensions'] ?? 768),

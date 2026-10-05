@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 import main
+from rag_pipeline import PipelineError
 
 
 def text_pdf(value: str) -> bytes:
@@ -39,6 +41,81 @@ def test_missing_service_token_never_falls_back_to_a_predictable_default(monkeyp
     with pytest.raises(HTTPException) as error:
         main.require_service_token('Bearer guessed-example-token')
     assert error.value.status_code == 401
+
+
+def test_retry_delay_parses_and_bounds_provider_hints() -> None:
+    assert main.extract_retry_delay('retry in 4.5s') == 15.0
+    assert main.extract_retry_delay('retryDelay: 42') == 44.0
+    assert main.extract_retry_delay('retry in 120s') == 60.0
+    assert main.extract_retry_delay('no provider hint') == 35.0
+
+
+class FakeEmbeddingModels:
+    def __init__(self, fail_first: bool = False) -> None:
+        self.calls: list[list[object]] = []
+        self.fail_first = fail_first
+        self.next_value = 0
+
+    def embed_content(self, *, contents: list[object], **_: object) -> object:
+        self.calls.append(contents)
+        if self.fail_first and len(self.calls) == 1:
+            raise RuntimeError('429 RESOURCE_EXHAUSTED: retry in 0.5s')
+        embeddings = []
+        for _ in contents:
+            self.next_value += 1
+            embeddings.append(SimpleNamespace(values=[float(self.next_value)] + [0.0] * 767))
+        return SimpleNamespace(embeddings=embeddings)
+
+
+class FakeEmbeddingClient:
+    def __init__(self, models: FakeEmbeddingModels) -> None:
+        self.models = models
+
+
+def test_embed_batches_contents_and_preserves_vector_order(monkeypatch) -> None:
+    models = FakeEmbeddingModels()
+    sleep_calls: list[float] = []
+    monkeypatch.setattr(main, 'gemini_client', lambda: FakeEmbeddingClient(models))
+    monkeypatch.setattr(main, 'EMBEDDING_MODEL', 'gemini-embedding-2')
+    monkeypatch.setattr(main, 'EMBEDDING_BATCH_SIZE', 40)
+    monkeypatch.setattr(main, 'EMBEDDING_MAX_RETRIES', 2)
+    monkeypatch.setattr(main.time, 'sleep', sleep_calls.append)
+
+    vectors = main.embed([f'chunk {index}' for index in range(81)], 'RETRIEVAL_DOCUMENT')
+
+    assert [len(batch) for batch in models.calls] == [40, 40, 1]
+    assert len(vectors) == 81
+    assert [vector[0] for vector in vectors] == [float(index) for index in range(1, 82)]
+    assert sleep_calls == [1.0, 1.0, 1.0]
+
+
+def test_embed_retries_a_rate_limited_batch_without_leaking_provider_message(monkeypatch) -> None:
+    models = FakeEmbeddingModels(fail_first=True)
+    sleep_calls: list[float] = []
+    monkeypatch.setattr(main, 'gemini_client', lambda: FakeEmbeddingClient(models))
+    monkeypatch.setattr(main, 'EMBEDDING_BATCH_SIZE', 40)
+    monkeypatch.setattr(main, 'EMBEDDING_MAX_RETRIES', 2)
+    monkeypatch.setattr(main.time, 'sleep', sleep_calls.append)
+
+    vectors = main.embed(['one chunk'], 'RETRIEVAL_QUERY')
+
+    assert len(models.calls) == 2
+    assert len(vectors) == 1
+    assert sleep_calls == [15.0, 1.0]
+
+
+def test_embed_hides_unexpected_provider_diagnostics(monkeypatch) -> None:
+    class BrokenModels:
+        def embed_content(self, **_: object) -> object:
+            raise RuntimeError('provider diagnostic that must not leave the AI service')
+
+    monkeypatch.setattr(main, 'gemini_client', lambda: SimpleNamespace(models=BrokenModels()))
+    monkeypatch.setattr(main, 'EMBEDDING_MAX_RETRIES', 1)
+    with pytest.raises(PipelineError) as error:
+        main.embed(['one chunk'], 'RETRIEVAL_QUERY')
+
+    assert error.value.code == 'EMBEDDING_FAILED'
+    assert 'provider diagnostic' not in str(error.value)
 
 
 def fake_embeddings(contents: list[str], _: str) -> list[list[float]]:

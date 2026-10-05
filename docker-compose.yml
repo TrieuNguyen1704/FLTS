@@ -35,6 +35,7 @@ services:
       QUEUE_CONNECTION: database
       AI_SERVICE_URL: http://ai:8001
       AI_SERVICE_TOKEN: ${AI_SERVICE_TOKEN:-}
+      GEMINI_EMBEDDING_MODEL: ${GEMINI_EMBEDDING_MODEL:-gemini-embedding-2}
       FRONTEND_URL: http://localhost:${APP_PORT:-8080}
       MAIL_MAILER: ${MAIL_MAILER:-smtp}
       MAIL_HOST: ${MAIL_HOST:-mailpit}
@@ -66,8 +67,10 @@ services:
     environment:
       AI_SERVICE_TOKEN: ${AI_SERVICE_TOKEN:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      GEMINI_EMBEDDING_MODEL: ${GEMINI_EMBEDDING_MODEL:-text-embedding-004}
-      GEMINI_GENERATION_MODEL: ${GEMINI_GENERATION_MODEL:-gemini-1.5-flash}
+      GEMINI_EMBEDDING_MODEL: ${GEMINI_EMBEDDING_MODEL:-gemini-embedding-2}
+      GEMINI_GENERATION_MODEL: ${GEMINI_GENERATION_MODEL:-gemini-2.5-flash}
+      GEMINI_EMBEDDING_BATCH_SIZE: ${GEMINI_EMBEDDING_BATCH_SIZE:-40}
+      GEMINI_EMBEDDING_MAX_RETRIES: ${GEMINI_EMBEDDING_MAX_RETRIES:-15}
       CHROMA_HOST: chroma
       CHROMA_PORT: 8000
       CHROMA_COLLECTION: ${CHROMA_COLLECTION:-flts_document_chunks}
@@ -85,7 +88,7 @@ services:
 
   queue-worker:
     build: ./backend
-    command: ["php", "artisan", "queue:work", "database", "--sleep=1", "--tries=3", "--backoff=5", "--timeout=180"]
+    command: ["php", "artisan", "queue:work", "database", "--sleep=1", "--tries=3", "--backoff=5", "--timeout=600"]
     environment:
       APP_ENV: local
       APP_DEBUG: "true"
@@ -99,6 +102,7 @@ services:
       QUEUE_CONNECTION: database
       AI_SERVICE_URL: http://ai:8001
       AI_SERVICE_TOKEN: ${AI_SERVICE_TOKEN:-}
+      GEMINI_EMBEDDING_MODEL: ${GEMINI_EMBEDDING_MODEL:-gemini-embedding-2}
       DOCUMENT_MAX_KB: ${DOCUMENT_MAX_KB:-10240}
     depends_on:
       mysql:
