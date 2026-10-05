@@ -4,10 +4,12 @@ import { useRoute, useRouter } from 'vue-router'
 import AppModal from '../components/AppModal.vue'
 import AppState from '../components/AppState.vue'
 import BaseButton from '../components/BaseButton.vue'
+import BaseInput from '../components/BaseInput.vue'
 import FileDropzone from '../components/FileDropzone.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import { courseService } from '../services/courseService'
 import { documentService } from '../services/documentService'
+import { ragService } from '../services/ragService'
 import { toast } from '../stores/toast'
 import { formatDate, formatFileSize } from '../utils/formatters'
 
@@ -25,6 +27,13 @@ const savingCourse = ref(false)
 const searchQuery = ref('')
 const editForm = reactive({ name: '', code: '', description: '' })
 const editErrors = reactive({ name: '', code: '' })
+const processingIds = ref({})
+const retrievalQuery = ref('')
+const retrievalLoading = ref(false)
+const retrievalError = ref('')
+const retrievalResult = ref(null)
+const evidenceLoading = ref(false)
+const evidenceResult = ref(null)
 
 async function loadCourse() {
   loading.value = true
@@ -114,6 +123,74 @@ async function downloadDocument(document) {
   }
 }
 
+async function processDocument(document) {
+  processingIds.value = { ...processingIds.value, [document.id]: true }
+  try {
+    const request = document.processing_status === 'failed'
+      ? ragService.retryProcessing(course.value.id, document.id)
+      : ragService.startProcessing(course.value.id, document.id)
+    await request
+    toast.show('Tài liệu đã được đưa vào hàng đợi xử lý RAG.')
+    await waitForProcessing(document.id)
+  } catch (requestError) {
+    toast.show(requestError.message || 'Không thể bắt đầu xử lý tài liệu.', 'error')
+  } finally {
+    const next = { ...processingIds.value }
+    delete next[document.id]
+    processingIds.value = next
+    await loadCourse()
+  }
+}
+
+async function waitForProcessing(documentId) {
+  // Poll only while this user initiated a run; the server remains the source of truth for its state.
+  for (let attempts = 0; attempts < 45; attempts += 1) {
+    await new Promise((resolve) => window.setTimeout(resolve, 2000))
+    const result = await ragService.processingStatus(course.value.id, documentId)
+    const status = result.document.processing_status
+    if (status === 'processed') {
+      toast.show(`Đã xử lý tài liệu: ${result.run?.chunk_count || 0} đoạn văn bản có thể truy xuất.`)
+      return
+    }
+    if (status === 'failed') {
+      throw new Error(result.run?.error_detail?.message || 'Xử lý tài liệu thất bại.')
+    }
+  }
+  toast.show('Tài liệu vẫn đang xử lý trong nền. Bạn có thể tải lại trang để xem trạng thái mới nhất.')
+}
+
+async function runRetrieval() {
+  retrievalError.value = ''
+  retrievalResult.value = null
+  evidenceResult.value = null
+  if (retrievalQuery.value.trim().length < 3) {
+    retrievalError.value = 'Vui lòng nhập câu hỏi có ít nhất 3 ký tự.'
+    return
+  }
+  retrievalLoading.value = true
+  try {
+    retrievalResult.value = await ragService.search(course.value.id, { query: retrievalQuery.value.trim(), top_k: 5 })
+  } catch (requestError) {
+    retrievalError.value = requestError.message || 'Không thể truy xuất tài liệu.'
+  } finally {
+    retrievalLoading.value = false
+  }
+}
+
+async function createEvidence() {
+  if (!retrievalQuery.value.trim()) return
+  evidenceLoading.value = true
+  retrievalError.value = ''
+  evidenceResult.value = null
+  try {
+    evidenceResult.value = await ragService.generateEvidence(course.value.id, { prompt: retrievalQuery.value.trim(), top_k: 5 })
+  } catch (requestError) {
+    retrievalError.value = requestError.message || 'Không thể tạo phản hồi có dẫn chứng.'
+  } finally {
+    evidenceLoading.value = false
+  }
+}
+
 onMounted(loadCourse)
 </script>
 
@@ -136,7 +213,7 @@ onMounted(loadCourse)
     </section>
     <section class="notice-banner">
       <strong>Quy trình tài liệu</strong>
-      <span>Tài liệu sau khi tải lên sẽ ở trạng thái <b>Chờ xử lý</b> để chuẩn bị cho quy trình trích xuất và tạo học liệu thông minh.</span>
+      <span>Tài liệu mới tải lên ở trạng thái <b>Chờ xử lý</b>. Chọn <b>Xử lý RAG</b> để đưa tài liệu vào hàng đợi trích xuất, chia đoạn và lập chỉ mục; chỉ tài liệu xử lý thành công mới có thể truy xuất.</span>
     </section>
     <section class="content-section">
       <header class="section-header">
@@ -176,6 +253,12 @@ onMounted(loadCourse)
               <td><StatusBadge :status="document.processing_status" /></td>
               <td class="table-actions">
                 <BaseButton variant="secondary" @click="downloadDocument(document)">Tải về</BaseButton>
+                <BaseButton
+                  v-if="document.processing_status !== 'processing'"
+                  variant="secondary"
+                  :loading="Boolean(processingIds[document.id])"
+                  @click="processDocument(document)"
+                >{{ document.processing_status === 'failed' ? 'Thử lại RAG' : 'Xử lý RAG' }}</BaseButton>
                 <BaseButton variant="danger-ghost" @click="documentToDelete = document">Xóa</BaseButton>
               </td>
             </tr>
@@ -183,6 +266,34 @@ onMounted(loadCourse)
         </table>
       </div>
       <AppState v-else title="Chưa có tài liệu nào" message="Tải lên tài liệu giảng dạy đầu tiên để phục vụ cho việc tạo học liệu." />
+    </section>
+    <section class="content-section rag-workbench">
+      <header class="section-header">
+        <div>
+          <h2>Kiểm tra truy xuất RAG</h2>
+          <p>Chỉ tìm trong các tài liệu đã xử lý thành công. Kết quả hiển thị đoạn nguồn thực tế từ ChromaDB.</p>
+        </div>
+      </header>
+      <form class="toolbar" @submit.prevent="runRetrieval">
+        <input v-model="retrievalQuery" maxlength="2000" placeholder="Nhập câu hỏi về tài liệu đã xử lý..." aria-label="Câu hỏi truy xuất RAG" />
+        <BaseButton type="submit" :loading="retrievalLoading">Tìm đoạn nguồn</BaseButton>
+        <BaseButton v-if="retrievalResult?.matches?.length" type="button" variant="secondary" :loading="evidenceLoading" @click="createEvidence">Tạo phản hồi có dẫn chứng</BaseButton>
+      </form>
+      <p v-if="retrievalError" class="form-error">{{ retrievalError }}</p>
+      <div v-if="retrievalResult" class="rag-results">
+        <p v-if="!retrievalResult.matches.length" class="muted">Không có đoạn tài liệu phù hợp. Hãy xử lý ít nhất một tài liệu trước.</p>
+        <article v-for="match in retrievalResult.matches" :key="match.vector_id" class="rag-result-card">
+          <header><strong>{{ match.document_name }}</strong><span>Độ phù hợp: {{ match.score }}</span></header>
+          <small>{{ match.source_locator || 'Vị trí nguồn chưa xác định' }}</small>
+          <p>{{ match.content }}</p>
+        </article>
+      </div>
+      <article v-if="evidenceResult" class="evidence-card">
+        <h3>Phản hồi có dẫn chứng</h3>
+        <p>{{ evidenceResult.evidence.answer }}</p>
+        <p><strong>Giới hạn:</strong> {{ evidenceResult.evidence.limitations }}</p>
+        <ul><li v-for="citation in evidenceResult.evidence.citations" :key="citation.vector_id">{{ citation.vector_id }}{{ citation.source_locator ? ` — ${citation.source_locator}` : '' }}</li></ul>
+      </article>
     </section>
   </template>
   <AppModal

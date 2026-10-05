@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Course;
 use App\Models\TeachingDocument;
+use App\Services\RagService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -41,7 +42,7 @@ class DocumentController
             'mime_type' => $file->getMimeType() ?: 'application/octet-stream',
             'extension' => $extension,
             'size_bytes' => $file->getSize(),
-            // Sprint 1 only persists the input. No extraction or RAG worker is connected yet.
+            // Upload only stores source + metadata; the Lecturer explicitly starts the separate RAG queue run.
             'processing_status' => 'uploaded_pending_processing',
         ]);
 
@@ -55,10 +56,24 @@ class DocumentController
         return Storage::disk('local')->download($document->stored_path, $document->original_name);
     }
 
-    public function destroy(Request $request, Course $course, TeachingDocument $document): JsonResponse
+    public function destroy(Request $request, Course $course, TeachingDocument $document, RagService $rag): JsonResponse
     {
         $this->ensureOwner($request, $course);
         abort_unless($document->course_id === $course->id, 404);
+
+        // Removing the source while its queued job can still upsert vectors creates an unrecoverable race.
+        if ($document->processing_status === 'processing') {
+            return response()->json(['message' => 'This document is currently being processed and cannot be deleted yet.'], 409);
+        }
+
+        if (in_array($document->processing_status, ['processed', 'failed'], true)) {
+            try {
+                // Failed persistence can leave vectors behind; pending uploads cannot have been indexed yet.
+                $rag->deleteDocumentVectors($document);
+            } catch (\RuntimeException $exception) {
+                return response()->json(['message' => 'Document deletion is paused because vector cleanup is unavailable.'], 503);
+            }
+        }
         Storage::disk('local')->delete($document->stored_path);
         $document->delete();
         return response()->json(['message' => 'Document deleted.']);

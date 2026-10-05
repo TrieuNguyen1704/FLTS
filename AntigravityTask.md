@@ -88,3 +88,73 @@ Khi **Codex** tiếp nhận công việc, hãy chú ý các định hướng ti�
 - PHPUnit trong API container pass **7 tests, 50 assertions**. Con số 49 trong snapshot cũ đã tăng một assertion do test `WelcomeMail` của PR #4.
 - Quyết định mới của project lead: Google Gemini thay OpenAI cho Sprint 2 — embedding `text-embedding-004` (768 dimensions), generation `gemini-1.5-flash`; ChromaDB local là vector store chính thức của vertical slice.
 - Không ghi Gemini API key vào tài liệu hoặc source. `PROJECT_CONTEXT.md` và `docs/SPRINT_2_EXECUTION_PLAN.md` đã được đồng bộ quyết định; package/image versions và các tham số còn TBD phải được pin khi bắt đầu branch triển khai.
+
+## 5. Sprint 2 implementation handoff — 05/10/2026
+
+- Branch in progress: `feature/sprint2-rag-vertical-slice`; do not merge or report Sprint 2 complete without PR/review and the evidence below.
+- The 5-service snapshot is obsolete. Compose now has 7 services: `api`, `queue-worker`, `ai`, `chroma`, `mysql`, `mailpit`, `web`. `api` must be healthy before worker starts.
+- Implemented code: Laravel queue/processing-runs/chunk/vector-reference migrations, authorized processing/retry/status/retrieval/evidence endpoints, FastAPI PDF/DOC/DOCX parser + cleaner/chunker + Chroma + Gemini SDK, and real Lecturer RAG controls in Course Detail. Legacy DOC uses `antiword` with a timeout; OCR is not implemented.
+- Verified at this checkpoint: Docker services Up (API/AI/MySQL/Chroma/Mailpit healthy), Laravel test suite 15 tests / 80 assertions, FastAPI 9 tests. Laravel covers queue/retry/ownership, the multipart Laravel→FastAPI file contract, deletion-vs-processing protection, vector cleanup and safe public errors. The FastAPI suite covers a real local Chroma process/retrieve/course-filter/delete lifecycle with deterministic test vectors and rejects a missing service token; it does not claim Gemini verification. A missing key results in an explicit error; it is not a processed document.
+- Security blocker: the Gemini key shared in chat must be revoked/rotated. Never copy it from chat. Put only the replacement in ignored `.env` (`GEMINI_API_KEY`); set a non-default `AI_SERVICE_TOKEN` too. Real embedding/generation E2E has not run until that is done.
+
+## 6. Gemini API & Service Token verification — 05/10/2026 (Antigravity)
+
+- **Cấu hình Secret Local:** Đã nạp thành công `AI_SERVICE_TOKEN` và `GEMINI_API_KEY` vào file local `.env` (được `.gitignore` bảo vệ).
+- **Phát hiện & Sửa lỗi tương thích Gemini SDK:**
+  1. Mô hình `text-embedding-004` bị lỗi 404 trên API v1beta của `google-genai` SDK. Đã chuyển sang `gemini-embedding-001` và cấu hình `output_dimensionality=768` để chuẩn hóa đúng vector 768 chiều theo kiến trúc của nhóm.
+  2. Khắc phục lỗi đóng kết nối `RuntimeError: Cannot send a request, as the client has been closed` do SDK garbage-collect `Client` ẩn danh: đã gán biến tường minh `client = gemini_client()`.
+  3. Mô hình sinh văn bản hoạt động ổn định với `gemini-2.5-flash`.
+- **Trạng thái kiểm thử thực tế:**
+  * Toàn bộ 7 services Docker đều đang chạy Up và Healthy (`api`, `ai`, `chroma`, `mysql`, `mailpit`, `queue-worker`, `web`).
+  * Gọi trực tiếp Gemini Embedding tạo vector 768 chiều: **Thành công 100%**.
+  * Gọi trực tiếp Gemini Generation với `gemini-2.5-flash`: **Thành công 100%**.
+  * Chạy `pytest` trong container `ai`: **9/9 tests passed**.
+  * Chạy `phpunit` trong container `api`: **15/15 tests, 80 assertions passed**.
+
+## 7. RAG Processing Failure Diagnosis, Root Cause Fix & Full E2E Verification — 05/10/2026 (Antigravity)
+
+### A. Nguyên nhân gốc rễ lỗi "Processing could not be completed" (HTTP 502 Bad Gateway)
+1. **Payload quá lớn:** Ban đầu `embed(contents=contents)` gửi toàn bộ các chunks (ví dụ 294 chunks của file PDF 89 trang) trong **1 request duy nhất**. Gemini API từ chối payload lớn, dẫn đến HTTP 502 `EMBEDDING_FAILED`.
+2. **Gemini Free Tier Quota:**
+   - Quota embedding trên gói Free của Google là **100 requests / phút** và **1.000 requests / ngày** trên model `gemini-embedding-001`.
+   - Quá trình test liên tục trước đó làm cạn kiệt quota ngày (1.000 requests) của `gemini-embedding-001`.
+3. **Queue Worker timeout & thiếu cơ chế retry 429 ở AI service:**
+   - Queue worker của Laravel có `backoff = 5` giây và `timeout = 180` giây. Khi Gemini trả về lỗi `429 RESOURCE_EXHAUSTED` (yêu cầu chờ 30s - 50s để reset hạn ngạch phút), FastAPI lập tức quăng lỗi 502 thay vì chờ và thử lại.
+   - Worker thử lại 3 lần trong vòng 15 giây (vẫn trong khoảng thời gian quota bị khóa) khiến job bị đánh dấu `failed` và ghi nhận `Processing could not be completed`.
+
+### B. Các giải pháp đã triển khai & tối ưu hóa mã nguồn
+1. **Chuyển sang `gemini-embedding-2`:** Cập nhật `.env` và `.env.example` sang `GEMINI_EMBEDDING_MODEL=gemini-embedding-2` (hạn ngạch ngày còn nguyên vẹn, hỗ trợ native 768 dimensions).
+2. **Batching & định dạng chuẩn `list[types.Content]`:**
+   - Chia nhỏ dữ liệu thành từng batch 40 chunks (`batch_size = 40`).
+   - Đóng gói mỗi chunk thành `types.Content(parts=[types.Part.from_text(text=item)])` để đảm bảo mỗi chunk trả về đúng 1 vector 768 chiều độc lập trong `resp.embeddings`.
+3. **Cơ chế tự động backoff & retry thông minh cho 429:**
+   - Viết hàm `extract_retry_delay(err_str)` tự động bóc tách thời gian chờ chính xác từ Gemini (`retry in Xs` hoặc `retryDelay`), giới hạn cận an toàn trong khoảng `[15s, 60s]`.
+   - Thiết lập `max_retries = 15` cho mỗi batch, tự động sleep và tiếp tục xử lý khi quota reset thay vì throw exception.
+4. **Nâng Timeout hệ thống lên 600 giây (10 phút):**
+   - [`backend/app/Services/RagService.php`](backend/app/Services/RagService.php): Tăng `$this->client()->timeout(600)`.
+   - [`backend/app/Jobs/ProcessTeachingDocument.php`](backend/app/Jobs/ProcessTeachingDocument.php): Tăng `public int $timeout = 600`.
+   - [`docker-compose.yml`](docker-compose.yml): Cập nhật queue worker `--timeout=600`.
+   - Đảm bảo các tài liệu PDF sách giáo trình dung lượng lớn (hàng trăm trang) có đủ thời gian chờ quota reset mà không bị worker kill.
+
+### C. Kết quả kiểm thử End-to-End (E2E) thực tế
+1. **Xử lý tài liệu Document 4 (`C1SE32-Proposal_FLTS_ver1.1.docx` — 46 chunks):**
+   - Queue worker chạy thành công sau 6 giây.
+   - `processing_status`: **`processed`** (Thành công).
+2. **Xử lý tài liệu Document 5 (`[studocu.com] - Tập Bài Giảng Kinh Tế Chính Trị Mác - Lênin.pdf` — 89 trang, 294 chunks):**
+   - AI service tự động chia 8 batches, tự động vượt qua các đợt rate limit (chờ 20s - 55s mỗi đợt) và hoàn tất sau 3 phút 35 giây.
+   - `processing_status`: **`processed`** (Thành công).
+   - Toàn bộ 294 vectors và chunks đã được lưu trữ an toàn trong ChromaDB và MySQL database (`flts_document_chunks`).
+3. **Kiểm thử RAG Search (ChromaDB Retrieval):**
+   - Query: `"kinh tế thị trường định hướng xã hội chủ nghĩa"`.
+   - Trả về 3 chunks có độ tương đồng cực cao (score ~ 0.795), trích xuất chính xác nội dung từ tài liệu vừa nạp.
+4. **Kiểm thử Grounded Evidence Generation (`gemini-2.5-flash`):**
+   - Prompt: `"Nêu tính ưu việt của kinh tế thị trường định hướng xã hội chủ nghĩa"`.
+   - Trả về câu trả lời tiếng Việt mạch lạc, kèm đầy đủ trích dẫn `citations` (vector IDs chính xác) và đánh giá giới hạn `limitations`.
+
+## 8. Codex follow-up verification — 05/10/2026
+
+- Xác minh độc lập runtime: cả 7 service đang chạy; health AI trả `gemini-embedding-2`, `gemini-2.5-flash`, ChromaDB và trạng thái Gemini configured.
+- Hiện còn hai chứng cứ có thể đối chiếu trực tiếp: run 14/document 5 có 294 chunks + 294 vector references; run 15/document 2 có 257 chunks + 257 vector references. Chroma giữ vector có course/document metadata tương ứng.
+- Source/config đã được đồng bộ để model fallback của Compose, Laravel và FastAPI đều là `gemini-embedding-2` / `gemini-2.5-flash`; batch size 40 và retry limit 15 được đưa thành biến môi trường. Bổ sung FastAPI regression test cho batching, vector order, retry 429 và lỗi provider an toàn.
+- Re-run regression: Laravel **15 tests / 80 assertions**; FastAPI **13 passed** (một cảnh báo deprecation không chặn test). Chi tiết evidence/boundary ở `docs/SPRINT_2_E2E_EVIDENCE.md`.
+- Không suy diễn rằng toàn Sprint 2 đã Done: document DOCX 4 trong handoff đã bị xóa nên cần chạy lại để có evidence DB/Chroma; cần capture mới UI retrieval/evidence, Chroma restart với document thật và fixture/authorization/error matrix.

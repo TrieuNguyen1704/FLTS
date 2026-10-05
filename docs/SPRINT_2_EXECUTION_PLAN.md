@@ -371,3 +371,63 @@ Các dòng blocker ở phần 12 là snapshot tại thời điểm lập plan, k
 - Bước code đầu tiên nên là một PR nền tảng PB13: tạo Laravel database queue/`queue-worker`, migration `document_processing_runs`, state/stage application enums, trigger/status API contract và test authorization/state transition. Email đồng bộ hiện tại có thể chuyển sang queue trong cùng nền tảng nhưng phải giữ behavior/test.
 - Song song sau khi contract PB13 ổn định: pin và thêm `pypdf`, `python-docx`, `google-genai`, `chromadb`, `httpx`, `pydantic-settings`, `pytest`; thêm Chroma service/version/healthcheck/volume; triển khai parser test-based trước embedding/generation.
 - Không đánh dấu RAG Done chỉ vì SDK gọi được. PB23 vẫn cần retrieved context, structured output validation, citations/grounding, error handling và bằng chứng end-to-end.
+
+## 15. Cập nhật triển khai thực tế — 05/10/2026
+
+### Đã triển khai trên `feature/sprint2-rag-vertical-slice`
+
+- Docker Compose có thêm `queue-worker` và `chroma` (volume `chroma_data`); `api` chạy migration/seed rồi healthcheck, worker chỉ chạy sau khi API healthy. Điều này sửa race condition migration đã quan sát khi hai service cùng migrate.
+- Laravel có database queue, state/run schema, job `ProcessTeachingDocument`, FastAPI client service, API trigger/retry/status/retrieval/evidence và check Lecturer ownership ở backend. Vue Course Detail dùng API thật để trigger/poll trạng thái, xem chunks count, truy xuất Top-K và xem evidence/citations.
+- FastAPI có parser PDF text-based/DOCX, xử lý lỗi có mã/stage, cleaning, deterministic paragraph-window chunking, Gemini embedding 768 chiều, Chroma upsert/delete/search theo course/document metadata và evidence generation có validate citation thuộc tập retrieved context.
+- Versions pinned: Chroma image/client `0.5.23`; `pypdf 5.0.1`; `python-docx 1.1.2`; `google-genai 2.28.0`; `pytest 8.3.3`. Legacy DOC dùng `antiword 0.37` từ Debian image với timeout 30 giây. SDK 2.x dùng `GenerateContentConfig.response_schema` cho structured JSON; không dùng package cũ không có trường này.
+
+### Evidence đã chạy
+
+| Hạng mục | Lệnh/kết quả thực tế |
+|---|---|
+| Laravel regression + PB13/PB20/PB21 API | `docker compose exec -T api php vendor/bin/phpunit --testdox`: **15 tests, 80 assertions passed**. Includes ownership, queue/retry, multipart Laravel→FastAPI processing contract, safe terminal deletion/vector cleanup and public-error boundary checks. |
+| FastAPI pipeline + local Chroma contract | `docker compose exec -T ai pytest -q`: **9 passed** (PDF, DOCX, DOC parser invocation/error mapping, cleaning, deterministic chunk/overlap, Chroma process/retrieve/course-filter/delete lifecycle with deterministic test vectors, and missing-service-token rejection). Đây không phải xác minh Gemini thật. |
+| Runtime services and persistence | `docker compose ps`: `api`, `ai`, `mysql`, `chroma`, `mailpit` healthy; `queue-worker`, `web` Up. Probe Chroma 768 chiều giữ `count=1` sau `docker compose restart chroma`, sau đó collection probe đã được xóa. |
+| Internal boundary | POST to FastAPI without Bearer service token returned **401**. |
+
+### Không được đánh dấu Done tại checkpoint này
+
+- Key Gemini đã được gửi qua chat nên phải revoke/rotate. Vì không có key mới trong ignored `.env`, chưa có bằng chứng chạy provider thật cho embedding/generation, chưa có vector persistence-after-restart, retrieval isolation fixture, hay evidence output thật.
+- PDF/DOCX happy-path, corrupt/empty/encrypted fixtures và error persistence cần thêm test matrix. Legacy DOC now uses `antiword`, but a real permitted binary DOC fixture is still required to claim parser fidelity or PB16 acceptance.
+- Không có OCR, re-ranking, benchmark/evaluation, rate limit, virus scan, quiz/publish/analytics. Không tự sửa workbook hay điền Actual hours.
+
+### Bước tiếp theo bắt buộc trước khi báo PB RAG complete
+
+1. Project lead tạo **Gemini key mới**, đặt `GEMINI_API_KEY=...` chỉ trong `.env`, thay `AI_SERVICE_TOKEN`, rồi `docker compose up --build -d`.
+2. Upload một PDF text-based và DOCX không nhạy cảm; trigger RAG trong Lecturer UI; lưu run ID, trạng thái processed, chunk count, Chroma result, retrieval citations và structured evidence response làm evidence.
+3. Restart `ai`/`chroma`, rerun retrieval; thêm fixtures + tests cho PDF/DOCX/error/filter/delete lifecycle trước Sprint Review.
+
+## 16. Cập nhật provider và evidence sau handoff — 05/10/2026
+
+### Quyết định triển khai hiện hành
+
+Quyết định Gemini ghi ở các phần trước là lịch sử plan ngày 02/10. Sau khi kiểm tra tương thích SDK và chạy provider thật, implementation hiện hành **thay thế model defaults** như sau:
+
+| Hạng mục | Cấu hình hiện hành | Lý do / giới hạn |
+|---|---|---|
+| Embedding | `gemini-embedding-2`, 768 dimensions | `text-embedding-004` không tương thích với endpoint SDK đã dùng trong local stack. FastAPI yêu cầu đúng 768 chiều trước khi persist. |
+| Generation | `gemini-2.5-flash` | Dùng output JSON có schema/citation validation trong AI service. Cần lưu output UI thực tế trước khi coi PB23 hoàn tất. |
+| Batch embedding | 40 chunks/request | Tránh payload quá lớn; cấu hình bằng `GEMINI_EMBEDDING_BATCH_SIZE`. |
+| Rate-limit retry | Tối đa 15 lần/batch, thời gian chờ được parse và giới hạn 15–60 giây | Cấu hình bằng `GEMINI_EMBEDDING_MAX_RETRIES`; timeout Laravel/worker hiện là 600 giây. Đây là giới hạn demo cần theo dõi với file rất lớn. |
+
+### Evidence đã xác minh lại từ runtime
+
+- `docker compose ps` cho thấy 7 service chạy; API, AI, MySQL, Chroma và Mailpit healthy.
+- Hai PDF còn trong dữ liệu local đều có run `processed`: run 14/document 5 có 294 chunks và 294 vector references; run 15/document 2 có 257 chunks và 257 vector references. Chroma giữ các vector có metadata course/document phù hợp.
+- API AI báo đúng model hiện hành (`gemini-embedding-2`, `gemini-2.5-flash`) và có Gemini key local; secret không xuất hiện trong source/tài liệu/Git.
+- Regression sau cập nhật: Laravel **15 tests / 80 assertions**; FastAPI **13 passed**. Bổ sung test FastAPI cho batching 40/40/1, thứ tự vectors, retry 429 và không rò provider diagnostics.
+- Handoff ghi nhận DOCX document 4 đã xử lý 46 chunks, retrieval và generation thành công. Vì document 4 đã bị xóa sau đó, đây chỉ là handoff/log evidence; nhóm phải chạy lại một DOCX được phép và lưu run ID để làm evidence độc lập.
+
+### Việc tiếp theo theo thứ tự ưu tiên
+
+1. Lecturer đăng nhập, mở course có document đã `processed`, chạy retrieval và evidence generation; lưu kết quả JSON/citations ở Sprint Review notes, không lưu key.
+2. Upload một DOCX được phép, trigger/poll đến terminal state và ghi run ID, chunk/vector count; đây là evidence còn thiếu cho PB16.
+3. Restart riêng `chroma`, chạy lại retrieval cùng query; kiểm tra metadata course filter và citations không đổi sang course khác.
+4. Hoàn thiện fixture matrix (PDF/DOCX/legacy DOC/corrupt/empty), cross-account authorization và failure/retry evidence trước khi cập nhật Done trong workbook.
+
+Không tự sửa Actual hours, Sprint workbook hay trạng thái Done chỉ dựa vào các kết quả ở mục này.
