@@ -74,7 +74,15 @@ class RagService
         }
 
         $error = $response->json('detail');
-        $message = is_array($error) ? ($error['message'] ?? null) : $error;
-        throw new \RuntimeException($message ?: "AI service {$operation} failed (HTTP {$response->status()}).");
+        $code = is_array($error) ? ($error['code'] ?? null) : null;
+        if ($response->status() === 429 || $code === 'GEMINI_RATE_LIMITED') {
+            throw new RagServiceException('Gemini is temporarily rate limited. Please retry shortly.', 429);
+        }
+        if ($response->status() === 422 && $code === 'NO_GROUNDED_CONTEXT') {
+            throw new RagServiceException('No processed source chunks matched this request.', 422);
+        }
+
+        // Do not pass FastAPI/provider diagnostics through the public Laravel API.
+        throw new RagServiceException("AI service {$operation} is temporarily unavailable.", 503);
     }
 }

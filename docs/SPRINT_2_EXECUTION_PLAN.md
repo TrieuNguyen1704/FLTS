@@ -431,3 +431,36 @@ Quyết định Gemini ghi ở các phần trước là lịch sử plan ngày 0
 4. Hoàn thiện fixture matrix (PDF/DOCX/legacy DOC/corrupt/empty), cross-account authorization và failure/retry evidence trước khi cập nhật Done trong workbook.
 
 Không tự sửa Actual hours, Sprint workbook hay trạng thái Done chỉ dựa vào các kết quả ở mục này.
+
+## 17. Verification update after evidence-response repair — 05/10/2026
+
+### What was corrected
+
+- The evidence endpoint now receives LLM output as source indexes, validates each index against the retrieved set, and maps it to the real Chroma vector ID/metadata in FastAPI. This fixed the observed `UNGROUNDABLE_CITATION` 502 without weakening citation validation.
+- Browser-facing RAG errors are intentionally safe: provider quota becomes retryable **429**, no matching source becomes **422**, and other AI-service failures become **503**. Provider diagnostics are not returned to the browser.
+- Nginx now has explicit proxy timeouts for the documented RAG window, while interactive query embedding itself fails fast on quota rather than holding the browser request through repeated long retries.
+- E-mail addresses are redacted from retrieved/LLM-context text; source locators survive chunk overlaps more reliably.
+
+### Evidence actually re-run
+
+| Check | Result on the local stack | Boundary |
+|---|---|---|
+| `docker compose up --build -d --force-recreate api queue-worker web ai` | Completed; seven services running afterward. | Recreated only stateless application services; data volumes were retained. |
+| Service status | `api`, `ai`, `mysql`, `chroma`, `mailpit` healthy; `web`, `queue-worker` running. | `docker compose ps` |
+| Evidence generation with configured Gemini | Successful internal request, returned two citations after recreation. | Real provider call; answer/source content deliberately not copied into documentation. |
+| FastAPI regression | **16 passed**, one Starlette deprecation warning. | `docker compose exec -T ai pytest -q` |
+| Laravel regression | **16 tests / 83 assertions**. | `docker compose exec -T api php vendor/bin/phpunit --testdox` |
+
+### PB status remains evidence-based
+
+| PB | Current status | Why it is not automatically `Done` |
+|---|---|---|
+| PB04 | Partially evidenced | Current local tests/build pass; remote CI/PR review evidence belongs to GitHub. |
+| PB13 | Implemented and regression-tested | A retained UI status/error capture and team acceptance review are still needed. |
+| PB15 | Implemented and test-covered | Valid/empty/corrupt tests exist; retain a review fixture/result in the team evidence pack. |
+| PB16 | Parser/test baseline implemented | A fresh permitted DOCX run must be retained; legacy binary DOC fidelity needs a real allowed fixture. |
+| PB17–PB18 | Implemented and unit-tested | Need agreed fixture/quality review, not merely code presence. |
+| PB19–PB21 | Working vertical slice, regression-tested | Need real-document Chroma-restart and cross-account/UI evidence. |
+| PB23 | Evidence generation now works end-to-end | It remains a RAG evidence prototype, not quiz/content-generation completion; retain fresh Lecturer UI capture. |
+
+Do not mark the whole Sprint 2 complete in the workbook from this table alone. The remaining rows are small, explicit verification/ceremony tasks rather than permission to invent missing RAG features.
