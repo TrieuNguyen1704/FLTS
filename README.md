@@ -1,6 +1,6 @@
 # FLTS Sprint 1 Demo
 
-Đây là bản demo tiến độ Sprint 1, không phải MVP hoàn chỉnh. Luồng đã có: đăng ký, đăng nhập/đăng xuất token, RBAC Lecturer/Student/Admin, Lecturer tạo/xem khóa học, Student chỉ xem khóa học đã được cấp quyền, và Lecturer tải PDF/DOC/DOCX để lưu metadata. Không có trích xuất nội dung, embedding, vector database, RAG, Quiz hay thống kê.
+Đây là nền tảng Sprint 1 đã được mở rộng bằng vertical slice Sprint 2 đang kiểm chứng, không phải MVP hoàn chỉnh. Luồng tài khoản/RBAC, course và upload metadata của Sprint 1 vẫn có; Sprint 2 bổ sung queue xử lý tài liệu, parser, ChromaDB và Gemini integration trong nhánh triển khai. Chỉ các bằng chứng ghi trong tài liệu Sprint 2 mới được dùng để báo cáo trạng thái RAG; Quiz và analytics vẫn chưa có.
 
 Xem [hướng dẫn đọc toàn bộ codebase bằng tiếng Việt](docs/CODEBASE_GUIDE_VI.md) để phân biệt code framework/dependency với code Sprint 1, và để lần theo các luồng login, phân quyền, course và upload.
 
@@ -9,6 +9,8 @@ Trạng thái closeout có bằng chứng thực tế, giới hạn còn lại v
 ## Sprint 2 RAG vertical slice (05/10/2026)
 
 Sprint 2 is in implementation, not complete. The current branch adds a real Laravel database queue/worker, FastAPI PDF/DOCX parser, text cleaning/chunking, local ChromaDB, Gemini embedding/generation integration, and Lecturer-only retrieval/evidence APIs. See [the execution-plan progress log](docs/SPRINT_2_EXECUTION_PLAN.md).
+
+For the repeatable live-provider verification procedure and the record fields required at Sprint Review, use [the Sprint 2 E2E evidence runbook](docs/SPRINT_2_E2E_EVIDENCE.md).
 
 After `Copy-Item .env.example .env`, edit the ignored `.env` and set a newly generated `GEMINI_API_KEY`; the key must never be committed. Also replace `AI_SERVICE_TOKEN` with a local random value. Without the Gemini key all containers still start, but document processing and RAG intentionally return a configuration error instead of pretending they succeeded.
 
@@ -43,7 +45,7 @@ Khóa học `FLIP-101` đã được cấp quyền cho `student@flts.test`.
 - Password recovery tạo token một lần, hết hạn sau một giờ. Với Docker local, email được xem trong Mailpit, không gửi ra Internet.
 - Admin có Account Management để tìm danh sách, đổi role/status của tài khoản khác. Suspend thu hồi token đang hoạt động; Admin không thể tự hạ role/tự suspend.
 - Lecturer có thể sửa course, tìm kiếm document theo tên và tải xuống document của course mình sở hữu.
-- `uploaded_pending_processing` vẫn chỉ có nghĩa file đã lưu; không có extraction, error state thật, embedding, vector DB hay RAG.
+- `uploaded_pending_processing` chỉ có nghĩa file đã lưu. Lecturer phải chủ động trigger processing; chỉ run `processed` có bằng chứng extraction/chunk/vector thành công. Nếu Gemini chưa được cấu hình, hệ thống trả lỗi cấu hình thay vì giả là đã xử lý.
 
 ## API và kiểm tra nhanh
 
@@ -73,12 +75,12 @@ Sau reset, chạy lại `docker compose up --build -d`; migration và seeder s�
 
 - Upload giới hạn 10 MB mặc định (`DOCUMENT_MAX_KB=10240` trong `.env`), chỉ chấp nhận phần mở rộng PDF/DOC/DOCX.
 - Trạng thái `uploaded_pending_processing` nghĩa là tệp đã lưu nhưng **chưa** được trích xuất, chunk, embedding hoặc RAG xử lý.
-- Nhà cung cấp LLM, embedding model và vector database vẫn TBD; demo không chọn thay nhóm.
+- Sprint 2 đã chọn Google Gemini (`text-embedding-004`, `gemini-1.5-flash`) và ChromaDB local. Một key Gemini mới, chỉ đặt trong `.env` bị Git ignore, vẫn là điều kiện bắt buộc trước khi có thể xác minh RAG E2E thật.
 - API dùng bearer token có hiệu lực đến đăng xuất hoặc lần đăng nhập mới của cùng tài khoản. Đây là lựa chọn tối thiểu cho demo, không phải cơ chế production.
 
 ## Cấu trúc
 
 - `frontend/` — Vue 3 + Vite, build thành Nginx static site.
 - `backend/` — Laravel API, migration/seed/test cho Sprint 1.
-- `ai-service/` — FastAPI health placeholder; pipeline AI thuộc Sprint 2.
+- `ai-service/` — FastAPI parser/chunking/Chroma/Gemini internal service cho Sprint 2; browser không gọi trực tiếp.
 - `docs/DEMO_2026-09-28.md` — kịch bản và bằng chứng demo.
