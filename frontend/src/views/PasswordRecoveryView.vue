@@ -85,7 +85,7 @@ async function reset() {
         </form>
       </template>
       <p class="auth-card__footer">
-        <RouterLink :to="{ name: 'login' }">← Quay lại đăng nhập</RouterLink>
+        <RouterLink :to="{ name: 'login' }">Quay lại đăng nhập</RouterLink>
       </p>
     </main>
   </div>

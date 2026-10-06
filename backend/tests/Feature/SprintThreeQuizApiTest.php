@@ -2,24 +2,30 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\GenerateQuizLearningObject;
 use App\Models\Course;
 use App\Models\LearningObject;
+use App\Models\LearningObjectGenerationRun;
 use App\Models\QuizOption;
 use App\Models\User;
+use App\Services\RagService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class SprintThreeQuizApiTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_course_owner_generates_a_grounded_draft_and_persists_parameters_and_version(): void
+    public function test_course_owner_queues_generation_and_duplicate_request_is_idempotent(): void
     {
         [$lecturer, , $course, $lecturerToken] = $this->courseActors();
-        Http::fake(['*' => Http::response($this->generatedQuiz(), 200)]);
+        Queue::fake();
+        $requestId = (string) Str::uuid();
 
-        $response = $this->withToken($lecturerToken)->postJson("/api/courses/{$course->id}/learning-objects/quizzes", [
+        $payload = [
             'title' => 'RAG Knowledge Check',
             'topic' => 'retrieval augmented generation',
             'difficulty' => 'medium',
@@ -27,14 +33,40 @@ class SprintThreeQuizApiTest extends TestCase
             'document_ids' => [],
             'top_k' => 8,
             'passing_score' => 70,
-        ])->assertCreated()
+            'request_id' => $requestId,
+        ];
+        $response = $this->withToken($lecturerToken)->postJson("/api/courses/{$course->id}/learning-objects/quizzes", $payload)
+            ->assertAccepted()
             ->assertJsonPath('learning_object.status', 'draft')
-            ->assertJsonPath('learning_object.quiz.total_questions', 3)
-            ->assertJsonPath('learning_object.quiz.questions.0.citations.0.vector_id', '5:14:0');
+            ->assertJsonPath('learning_object.generation.status', 'queued')
+            ->assertJsonPath('learning_object.quiz', null);
 
         $objectId = $response->json('learning_object.id');
         $this->assertDatabaseHas('learning_objects', ['id' => $objectId, 'course_id' => $course->id, 'created_by' => $lecturer->id, 'type' => 'quiz', 'status' => 'draft']);
-        $this->assertDatabaseHas('learning_object_versions', ['learning_object_id' => $objectId, 'version_number' => 1]);
+        $this->assertDatabaseHas('learning_object_generation_runs', ['learning_object_id' => $objectId, 'request_id' => $requestId, 'status' => 'queued']);
+        Queue::assertPushed(GenerateQuizLearningObject::class, fn ($job) => $job->runId === $response->json('learning_object.generation.id'));
+
+        $this->withToken($lecturerToken)->postJson("/api/courses/{$course->id}/learning-objects/quizzes", $payload)
+            ->assertAccepted()->assertJsonPath('learning_object.id', $objectId);
+        $this->assertDatabaseCount('learning_objects', 1);
+        $this->assertDatabaseCount('learning_object_generation_runs', 1);
+    }
+
+    public function test_generation_job_persists_grounded_quiz_version_and_parameters(): void
+    {
+        [, , $course, $lecturerToken] = $this->courseActors();
+        Queue::fake();
+        Http::fake(['*' => Http::response($this->generatedQuiz(), 200)]);
+        $response = $this->withToken($lecturerToken)->postJson("/api/courses/{$course->id}/learning-objects/quizzes", [
+            'topic' => 'retrieval augmented generation', 'difficulty' => 'medium', 'question_count' => 3,
+            'top_k' => 8, 'passing_score' => 70, 'request_id' => (string) Str::uuid(),
+        ])->assertAccepted();
+        $run = LearningObjectGenerationRun::findOrFail($response->json('learning_object.generation.id'));
+
+        (new GenerateQuizLearningObject($run->id))->handle(app(RagService::class));
+
+        $this->assertDatabaseHas('learning_object_generation_runs', ['id' => $run->id, 'status' => 'completed']);
+        $this->assertDatabaseHas('learning_object_versions', ['learning_object_id' => $response->json('learning_object.id'), 'version_number' => 1]);
         $this->assertDatabaseCount('quiz_questions', 3);
         $this->assertDatabaseCount('quiz_options', 12);
         Http::assertSent(fn ($request) => str_ends_with($request->url(), '/internal/v1/generation/quiz')
@@ -48,7 +80,7 @@ class SprintThreeQuizApiTest extends TestCase
         [, $student, $course, , $studentToken] = $this->courseActors();
         $other = User::create(['name' => 'Other lecturer', 'email' => 'other@flts.test', 'password' => bcrypt('Password123!'), 'role' => 'lecturer']);
         $otherToken = $this->tokenFor($other, 'other-token');
-        $payload = ['topic' => 'grounded topic', 'difficulty' => 'easy', 'question_count' => 3, 'top_k' => 3];
+        $payload = ['topic' => 'grounded topic', 'difficulty' => 'easy', 'question_count' => 3, 'top_k' => 3, 'request_id' => (string) Str::uuid()];
 
         $this->withToken($otherToken)->postJson("/api/courses/{$course->id}/learning-objects/quizzes", $payload)->assertForbidden();
         $this->withToken($studentToken)->postJson("/api/courses/{$course->id}/learning-objects/quizzes", $payload)->assertForbidden();
@@ -139,12 +171,44 @@ class SprintThreeQuizApiTest extends TestCase
     public function test_quiz_generation_maps_provider_failures_to_safe_public_errors(): void
     {
         [, , $course, $lecturerToken] = $this->courseActors();
+        Queue::fake();
         Http::fake(['*' => Http::response(['detail' => ['code' => 'QUIZ_GENERATION_FAILED', 'message' => 'private provider detail', 'stage' => 'generation']], 502)]);
 
-        $this->withToken($lecturerToken)->postJson("/api/courses/{$course->id}/learning-objects/quizzes", [
+        $response = $this->withToken($lecturerToken)->postJson("/api/courses/{$course->id}/learning-objects/quizzes", [
             'topic' => 'grounded topic', 'difficulty' => 'medium', 'question_count' => 3, 'top_k' => 3,
-        ])->assertStatus(503)->assertJsonPath('message', 'Quiz generation is temporarily unavailable.')
+            'request_id' => (string) Str::uuid(),
+        ])->assertAccepted();
+        $run = LearningObjectGenerationRun::findOrFail($response->json('learning_object.generation.id'));
+        (new GenerateQuizLearningObject($run->id))->handle(app(RagService::class));
+
+        $this->withToken($lecturerToken)->getJson("/api/courses/{$course->id}/learning-objects/{$response->json('learning_object.id')}")
+            ->assertOk()->assertJsonPath('learning_object.generation.status', 'failed')
+            ->assertJsonPath('learning_object.generation.error_message', 'Chưa thể tạo Quiz lúc này. Vui lòng thử lại sau.')
             ->assertJsonMissing(['private provider detail']);
+    }
+
+    public function test_failed_generation_can_be_retried_without_losing_parameters(): void
+    {
+        [, , $course, $lecturerToken] = $this->courseActors();
+        Queue::fake();
+        $object = LearningObject::create([
+            'course_id' => $course->id, 'type' => 'quiz', 'title' => 'Failed Quiz',
+            'status' => 'draft', 'created_by' => User::where('email', 'lecturer3@flts.test')->value('id'),
+        ]);
+        $parameters = ['topic' => 'graph theory', 'difficulty' => 'medium', 'question_count' => 3, 'document_ids' => [], 'top_k' => 5];
+        $object->generationRuns()->create([
+            'request_id' => (string) Str::uuid(), 'attempt_number' => 1, 'status' => 'failed',
+            'generation_params' => $parameters, 'error_code' => 'RATE_LIMITED', 'error_message' => 'Please retry.',
+        ]);
+
+        $response = $this->withToken($lecturerToken)
+            ->postJson("/api/courses/{$course->id}/learning-objects/{$object->id}/generation-runs/retry")
+            ->assertAccepted()->assertJsonPath('learning_object.generation.status', 'queued')
+            ->assertJsonPath('learning_object.generation.attempt_number', 2);
+
+        $retry = LearningObjectGenerationRun::findOrFail($response->json('learning_object.generation.id'));
+        $this->assertSame($parameters, $retry->generation_params);
+        Queue::assertPushed(GenerateQuizLearningObject::class, fn ($job) => $job->runId === $retry->id);
     }
 
     private function courseActors(): array
@@ -164,10 +228,14 @@ class SprintThreeQuizApiTest extends TestCase
 
     private function createDraft(Course $course, string $token): LearningObject
     {
+        Queue::fake();
         Http::fake(['*' => Http::response($this->generatedQuiz(), 200)]);
-        $id = $this->withToken($token)->postJson("/api/courses/{$course->id}/learning-objects/quizzes", [
+        $response = $this->withToken($token)->postJson("/api/courses/{$course->id}/learning-objects/quizzes", [
             'topic' => 'retrieval augmented generation', 'difficulty' => 'medium', 'question_count' => 3, 'top_k' => 3,
-        ])->assertCreated()->json('learning_object.id');
+            'request_id' => (string) Str::uuid(),
+        ])->assertAccepted();
+        (new GenerateQuizLearningObject($response->json('learning_object.generation.id')))->handle(app(RagService::class));
+        $id = $response->json('learning_object.id');
         return LearningObject::findOrFail($id);
     }
 

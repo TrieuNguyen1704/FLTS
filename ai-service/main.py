@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 from google import genai
 from google.genai import types
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 
 from rag_pipeline import PipelineError, chunk_text, extract_document
 
@@ -253,6 +254,29 @@ async def process_document(
     mime_type: Annotated[str, Form()],
 ) -> dict[str, Any]:
     content = await file.read()
+    # Parsing, provider retries and Chroma writes are synchronous. Running them in FastAPI's
+    # worker pool keeps health checks and interactive quiz requests responsive.
+    return await run_in_threadpool(
+        process_document_content,
+        content,
+        file.filename or 'document',
+        document_id,
+        course_id,
+        processing_run_id,
+        extension,
+        mime_type,
+    )
+
+
+def process_document_content(
+    content: bytes,
+    filename: str,
+    document_id: str,
+    course_id: str,
+    processing_run_id: str,
+    extension: str,
+    mime_type: str,
+) -> dict[str, Any]:
     extracted = extract_document(content, extension)
     chunks = chunk_text(extracted.text)
     if not chunks:
@@ -264,7 +288,7 @@ async def process_document(
         collection.delete(where={'document_id': str(document_id)})
         vector_ids = [f'{document_id}:{processing_run_id}:{chunk["chunk_index"]}' for chunk in chunks]
         metadatas = [{
-            'course_id': str(course_id), 'document_id': str(document_id), 'document_name': file.filename or 'document',
+            'course_id': str(course_id), 'document_id': str(document_id), 'document_name': filename,
             'source_locator': chunk['source_locator'] or '', 'chunk_index': chunk['chunk_index'], 'mime_type': mime_type,
         } for chunk in chunks]
         collection.upsert(ids=vector_ids, documents=[chunk['content'] for chunk in chunks], embeddings=vectors, metadatas=metadatas)
@@ -406,3 +430,14 @@ def delete_document_vectors(document_id: int) -> dict[str, Any]:
     except Exception as exc:
         raise PipelineError('VECTOR_DELETE_FAILED', 'ChromaDB could not remove the document vectors.', 'cleanup', 503) from exc
     return {'deleted': True, 'document_id': document_id}
+
+
+@APP.delete('/internal/v1/courses/{course_id}/vectors', dependencies=[Depends(require_service_token)])
+def delete_course_vectors(course_id: int) -> dict[str, Any]:
+    try:
+        chroma_collection().delete(where={'course_id': str(course_id)})
+    except PipelineError:
+        raise
+    except Exception as exc:
+        raise PipelineError('VECTOR_DELETE_FAILED', 'ChromaDB could not remove the course vectors.', 'cleanup', 503) from exc
+    return {'deleted': True, 'course_id': course_id}

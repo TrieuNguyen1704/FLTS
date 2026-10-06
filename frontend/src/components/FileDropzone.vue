@@ -48,7 +48,6 @@ function drop(event) {
       accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
       @change="fromInput"
     />
-    <div class="dropzone__icon">↑</div>
     <h3>Tải lên tài liệu giảng dạy</h3>
     <p>
       Kéo thả tệp tin vào đây, hoặc

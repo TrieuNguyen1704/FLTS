@@ -68,14 +68,9 @@ onMounted(loadUsers)
 <template>
   <section class="page-heading">
     <div>
-      <p class="eyebrow">KHÔNG GIAN QUẢN TRỊ VIÊN</p>
       <h1>Quản lý tài khoản</h1>
       <p>Xem danh sách tài khoản đã đăng ký, phân quyền vai trò và quản lý trạng thái truy cập.</p>
     </div>
-  </section>
-  <section class="notice-banner">
-    <strong>Kiểm soát quyền truy cập</strong>
-    <span>Khóa tài khoản (Tạm khóa) sẽ ngay lập tức thu hồi phiên đăng nhập hiện tại của người dùng. Bạn không thể tự thay đổi vai trò hoặc trạng thái của chính mình.</span>
   </section>
   <form class="toolbar" @submit.prevent="loadUsers">
     <input v-model="query" placeholder="Tìm kiếm theo tên hoặc email..." aria-label="Tìm kiếm tài khoản" />
@@ -122,16 +117,16 @@ onMounted(loadUsers)
     <label class="field">
       <span class="field__label">Vai trò</span>
       <select v-model="form.role">
-        <option value="lecturer">Giảng viên (Lecturer)</option>
-        <option value="student">Sinh viên (Student)</option>
-        <option value="admin">Quản trị viên (Administrator)</option>
+        <option value="lecturer">Giảng viên</option>
+        <option value="student">Sinh viên</option>
+        <option value="admin">Quản trị viên</option>
       </select>
     </label>
     <label class="field">
       <span class="field__label">Trạng thái tài khoản</span>
       <select v-model="form.account_status">
-        <option value="active">Hoạt động (Active)</option>
-        <option value="suspended">Tạm khóa (Suspended)</option>
+        <option value="active">Hoạt động</option>
+        <option value="suspended">Tạm khóa</option>
       </select>
     </label>
   </AppModal>

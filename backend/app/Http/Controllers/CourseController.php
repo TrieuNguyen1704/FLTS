@@ -4,8 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Models\Course;
 use App\Models\User;
+use App\Services\RagService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Throwable;
 
 class CourseController
 {
@@ -61,6 +65,40 @@ class CourseController
         }
         $course->students()->syncWithoutDetaching([$student->id]);
         return response()->json(['message' => 'Student granted course access.']);
+    }
+
+    public function destroy(Request $request, Course $course, RagService $rag): JsonResponse
+    {
+        $this->ensureOwner($request, $course);
+        $data = $request->validate(['confirmation' => ['required', 'string']]);
+        if (!hash_equals($course->code, $data['confirmation'])) {
+            return response()->json(['message' => 'Mã xác nhận không khớp với mã khóa học.'], 422);
+        }
+
+        // Deleting while a worker can still write results would leave files or vectors without their parent course.
+        if ($course->documents()->where('processing_status', 'processing')->exists()
+            || $course->learningObjects()->whereHas('generationRuns', fn ($query) => $query->whereIn('status', ['queued', 'generating']))->exists()) {
+            return response()->json(['message' => 'Khóa học đang có tác vụ xử lý. Vui lòng chờ tác vụ kết thúc trước khi xóa.'], 409);
+        }
+
+        $documents = $course->documents()->get(['stored_path', 'processing_status']);
+        if ($documents->whereIn('processing_status', ['processed', 'failed'])->isNotEmpty()) {
+            try {
+                // External vector cleanup happens before destructive database changes; failure leaves the course intact.
+                $rag->deleteCourseVectors($course);
+            } catch (Throwable $exception) {
+                report($exception);
+                return response()->json(['message' => 'Chưa thể xóa khóa học vì kho tìm kiếm đang không khả dụng. Dữ liệu chưa bị thay đổi.'], 503);
+            }
+        }
+
+        $paths = $documents->pluck('stored_path')->filter()->values()->all();
+        if ($paths !== [] && !Storage::disk('local')->delete($paths)) {
+            return response()->json(['message' => 'Chưa thể xóa các tệp của khóa học. Dữ liệu khóa học chưa bị thay đổi.'], 503);
+        }
+
+        DB::transaction(fn () => $course->delete());
+        return response()->json(['message' => 'Đã xóa khóa học và dữ liệu liên quan.']);
     }
 
     private function ensureOwner(Request $request, Course $course): void

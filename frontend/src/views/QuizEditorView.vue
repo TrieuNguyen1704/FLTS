@@ -68,19 +68,25 @@ async function archive() {
   catch (requestError) { error.value = requestError.message || 'Không thể lưu trữ Quiz.' }
 }
 
+function statusLabel(status) {
+  if (status === 'draft') return 'Bản nháp'
+  if (status === 'published') return 'Đã xuất bản'
+  if (status === 'archived') return 'Đã lưu trữ'
+  return status
+}
+
 onMounted(load)
 </script>
 
 <template>
-  <button class="back-link" @click="router.push({ name: 'learning-objects', params: { courseId: route.params.courseId } })">← Quay lại danh sách Quiz</button>
+  <button class="back-link" @click="router.push({ name: 'learning-objects', params: { courseId: route.params.courseId } })">Quay lại danh sách Quiz</button>
   <AppState v-if="loading" type="loading" title="Đang tải Quiz" message="Đang lấy nội dung và lịch sử phiên bản." />
   <AppState v-else-if="error && !object" type="error" title="Không thể mở Quiz" :message="error" action-label="Thử lại" @action="load" />
   <template v-else>
     <section class="page-heading quiz-heading">
-      <div><p class="eyebrow">LECTURER REVIEW</p><h1>{{ object.title }}</h1><p>Kiểm tra câu hỏi, đáp án, giải thích và nguồn trước khi xuất bản.</p></div>
-      <div class="table-actions"><span class="status-chip" :class="`status-chip--${object.status}`">{{ object.status }}</span><BaseButton v-if="object.status === 'draft'" :loading="publishing" @click="publish">Phê duyệt và xuất bản</BaseButton><BaseButton v-if="object.status !== 'archived'" variant="danger-ghost" @click="archive">Lưu trữ</BaseButton></div>
+      <div><h1>{{ object.title }}</h1><p>Kiểm tra câu hỏi, đáp án, giải thích và nguồn trước khi xuất bản.</p></div>
+      <div class="table-actions"><span class="status-chip" :class="`status-chip--${object.status}`">{{ statusLabel(object.status) }}</span><BaseButton v-if="object.status === 'draft'" :loading="publishing" @click="publish">Phê duyệt và xuất bản</BaseButton><BaseButton v-if="object.status !== 'archived'" variant="danger-ghost" @click="archive">Lưu trữ</BaseButton></div>
     </section>
-    <section class="notice-banner"><strong>Kiểm soát con người</strong><span>AI chỉ tạo bản draft. Giảng viên chịu trách nhiệm kiểm tra nội dung và nguồn dẫn trước khi xuất bản.</span></section>
     <form class="quiz-editor" @submit.prevent="save">
       <div class="learning-panel">
         <BaseInput v-model="form.title" label="Tiêu đề Quiz" :disabled="object.status !== 'draft'" required />
@@ -98,6 +104,6 @@ onMounted(load)
       <p v-if="error" class="form-error">{{ error }}</p>
       <BaseButton v-if="object.status === 'draft'" type="submit" :loading="saving">Lưu thay đổi thành phiên bản mới</BaseButton>
     </form>
-    <section class="content-section"><header class="section-header"><div><h2>Lịch sử phiên bản</h2><p>Mỗi lần chỉnh sửa draft tạo một snapshot riêng.</p></div></header><div class="version-list"><span v-for="version in object.versions" :key="version.id" class="count-chip">Phiên bản {{ version.version_number }}</span></div></section>
+    <section class="content-section"><header class="section-header"><div><h2>Lịch sử phiên bản</h2><p>Mỗi lần lưu chỉnh sửa sẽ tạo một phiên bản mới.</p></div></header><div class="version-list"><span v-for="version in object.versions" :key="version.id" class="count-chip">Phiên bản {{ version.version_number }}</span></div></section>
   </template>
 </template>

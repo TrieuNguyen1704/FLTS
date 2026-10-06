@@ -24,6 +24,8 @@ class ProcessTeachingDocument implements ShouldQueue
 
     public function __construct(public int $runId)
     {
+        // Keep slow extraction/embedding work away from interactive generation jobs.
+        $this->onQueue('documents');
     }
 
     public function handle(RagService $rag): void

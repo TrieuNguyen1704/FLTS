@@ -2,21 +2,22 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\GenerateQuizLearningObject;
 use App\Models\Course;
 use App\Models\LearningObject;
+use App\Models\LearningObjectGenerationRun;
 use App\Models\Quiz;
-use App\Services\RagService;
-use App\Services\RagServiceException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class LearningObjectController
 {
     public function index(Request $request, Course $course): JsonResponse
     {
         $this->ensureCourseAccess($request, $course);
-        $query = $course->learningObjects()->with(['creator:id,name', 'quiz'])->withMax('versions', 'version_number');
+        $query = $course->learningObjects()->with(['creator:id,name', 'quiz', 'latestGenerationRun'])->withMax('versions', 'version_number');
         if ($request->user()->role === 'student') {
             $query->where('status', 'published');
         }
@@ -25,7 +26,7 @@ class LearningObjectController
         return response()->json(['learning_objects' => $objects]);
     }
 
-    public function storeQuiz(Request $request, Course $course, RagService $rag): JsonResponse
+    public function storeQuiz(Request $request, Course $course): JsonResponse
     {
         $this->ensureOwner($request, $course);
         $data = $request->validate([
@@ -39,10 +40,17 @@ class LearningObjectController
             'top_k' => ['nullable', 'integer', 'min:3', 'max:15'],
             'time_limit_minutes' => ['nullable', 'integer', 'min:1', 'max:480'],
             'passing_score' => ['nullable', 'integer', 'min:0', 'max:100'],
+            'request_id' => ['required', 'uuid'],
         ]);
         $documentIds = array_values(array_unique($data['document_ids'] ?? []));
         if ($documentIds !== [] && $course->documents()->whereIn('id', $documentIds)->where('processing_status', 'processed')->count() !== count($documentIds)) {
             return response()->json(['message' => 'Every selected document must belong to this course and be processed.'], 422);
+        }
+
+        $existingRun = LearningObjectGenerationRun::with('learningObject')->where('request_id', $data['request_id'])->first();
+        if ($existingRun) {
+            abort_unless($existingRun->learningObject->course_id === $course->id && $existingRun->learningObject->created_by === $request->user()->id, 409);
+            return response()->json(['learning_object' => $this->detail($existingRun->learningObject)], 202);
         }
 
         $parameters = [
@@ -51,41 +59,50 @@ class LearningObjectController
             'question_count' => $data['question_count'],
             'document_ids' => $documentIds,
             'top_k' => $data['top_k'] ?? 8,
+            'requested_title' => $data['title'] ?? null,
+            'requested_description' => $data['description'] ?? null,
+            'time_limit_minutes' => $data['time_limit_minutes'] ?? null,
+            'passing_score' => $data['passing_score'] ?? 60,
         ];
-        try {
-            $generated = $rag->generateQuiz($course, $parameters);
-        } catch (RagServiceException $exception) {
-            $status = in_array($exception->getCode(), [422, 429], true) ? $exception->getCode() : 503;
-            $message = $status === 503 ? 'Quiz generation is temporarily unavailable.' : $exception->getMessage();
-            return response()->json(['message' => $message], $status);
-        }
 
-        $learningObject = DB::transaction(function () use ($request, $course, $data, $parameters, $generated) {
-            $payload = $generated['quiz'];
+        [$learningObject, $run] = DB::transaction(function () use ($request, $course, $data, $parameters) {
             $object = LearningObject::create([
                 'course_id' => $course->id,
                 'type' => 'quiz',
-                'title' => $data['title'] ?? $payload['title'],
-                'description' => $data['description'] ?? ($payload['description'] ?? null),
+                'title' => ($data['title'] ?? null) ?: 'Quiz: '.$data['topic'],
+                'description' => $data['description'] ?? null,
                 'status' => 'draft',
                 'created_by' => $request->user()->id,
             ]);
-            $quiz = $object->quiz()->create([
-                'time_limit_minutes' => $data['time_limit_minutes'] ?? null,
-                'passing_score' => $data['passing_score'] ?? 60,
-                'total_questions' => count($payload['questions']),
-            ]);
-            $this->replaceQuestions($quiz, $payload['questions']);
-            $object->versions()->create([
-                'version_number' => 1,
-                'content_payload' => $this->contentSnapshot($quiz->fresh('questions.options')),
+            $run = $object->generationRuns()->create([
+                'request_id' => $data['request_id'],
+                'attempt_number' => 1,
+                'status' => 'queued',
                 'generation_params' => $parameters,
-                'created_by' => $request->user()->id,
             ]);
-            return $object;
+            return [$object, $run];
         });
+        GenerateQuizLearningObject::dispatch($run->id);
 
-        return response()->json(['learning_object' => $this->detail($learningObject->fresh())], 201);
+        return response()->json(['learning_object' => $this->detail($learningObject->fresh())], 202);
+    }
+
+    public function retryGeneration(Request $request, Course $course, LearningObject $learningObject): JsonResponse
+    {
+        $this->ensureObjectCourse($course, $learningObject);
+        $this->ensureOwner($request, $course);
+        $latest = $learningObject->generationRuns()->latest('attempt_number')->firstOrFail();
+        abort_unless($latest->status === 'failed' && !$learningObject->quiz()->exists(), 422, 'Only a failed generation can be retried.');
+
+        $run = $learningObject->generationRuns()->create([
+            'request_id' => (string) Str::uuid(),
+            'attempt_number' => $latest->attempt_number + 1,
+            'status' => 'queued',
+            'generation_params' => $latest->generation_params,
+        ]);
+        GenerateQuizLearningObject::dispatch($run->id);
+
+        return response()->json(['learning_object' => $this->detail($learningObject->fresh())], 202);
     }
 
     public function show(Request $request, Course $course, LearningObject $learningObject): JsonResponse
@@ -213,12 +230,13 @@ class LearningObjectController
             'published_at' => $object->published_at, 'created_at' => $object->created_at,
             'creator' => $object->creator, 'total_questions' => $object->quiz?->total_questions,
             'current_version' => (int) ($object->versions_max_version_number ?? $object->versions()->max('version_number')),
+            'generation' => $this->generationSummary($object->latestGenerationRun ?? $object->generationRuns()->latest('attempt_number')->first()),
         ];
     }
 
     private function detail(LearningObject $object, bool $studentView = false): array
     {
-        $object->load(['creator:id,name', 'versions' => fn ($query) => $query->latest('version_number'), 'quiz.questions.options']);
+        $object->load(['creator:id,name', 'versions' => fn ($query) => $query->latest('version_number'), 'quiz.questions.options', 'latestGenerationRun']);
         $quiz = $object->quiz;
         $data = $this->summary($object);
         $data['versions'] = $object->versions->map(fn ($version) => [
@@ -250,6 +268,23 @@ class LearningObjectController
             })->values(),
         ] : null;
         return $data;
+    }
+
+    private function generationSummary(?LearningObjectGenerationRun $run): ?array
+    {
+        if (!$run) {
+            return null;
+        }
+
+        return [
+            'id' => $run->id,
+            'status' => $run->status,
+            'attempt_number' => $run->attempt_number,
+            'error_code' => $run->error_code,
+            'error_message' => $run->error_message,
+            'started_at' => $run->started_at,
+            'finished_at' => $run->finished_at,
+        ];
     }
 
     private function ensureObjectCourse(Course $course, LearningObject $object): void

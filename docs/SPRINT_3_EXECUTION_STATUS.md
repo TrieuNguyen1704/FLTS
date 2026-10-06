@@ -33,9 +33,9 @@ Hai mục này là stretch goal theo quyết định Section 10 của `Antigravi
 
 Các migration `2026_10_06_000014` đến `000020` tạo bảy bảng: `learning_objects`, `learning_object_versions`, `quizzes`, `quiz_questions`, `quiz_options`, `quiz_attempts`, `quiz_attempt_answers`. Migration chạy thành công ở batch 6 trên MySQL hiện hữu, không reset volume.
 
-Luồng Lecturer:
+Luồng Lecturer (cập nhật xử lý nền):
 
-`LearningObjectsView.vue` → `learningObjectService.generateQuiz()` → `POST /api/courses/{course}/learning-objects/quizzes` → `LearningObjectController@storeQuiz` → `RagService@generateQuiz` → `POST /internal/v1/generation/quiz` → Chroma retrieval → Gemini structured output → server citation mapping → transaction lưu draft/version/questions/options.
+`LearningObjectsView.vue` → `learningObjectService.generateQuiz()` → `POST /api/courses/{course}/learning-objects/quizzes` trả `202` → lưu `learning_object_generation_runs` (`queued`) → `GenerateQuizLearningObject` trên queue `generation` → `RagService@generateQuiz` → FastAPI/Chroma/Gemini → transaction lưu draft/version/questions/options → UI poll trạng thái. `ProcessTeachingDocument` dùng queue `documents`; FastAPI đưa parsing/embedding đồng bộ sang thread pool để không chặn health và request tương tác.
 
 Luồng Student:
 
@@ -45,7 +45,8 @@ Luồng Student:
 
 - `POST /internal/v1/generation/quiz` — internal FastAPI, bắt buộc bearer `AI_SERVICE_TOKEN`.
 - `GET /api/courses/{course}/learning-objects` — owner Lecturer hoặc Student đã enrollment; Student chỉ nhận published.
-- `POST /api/courses/{course}/learning-objects/quizzes` — tạo draft, Lecturer owner.
+- `POST /api/courses/{course}/learning-objects/quizzes` — tạo placeholder/run và trả `202`, Lecturer owner; `request_id` UUID chống submit trùng.
+- `POST .../{learningObject}/generation-runs/retry` — tạo attempt mới từ tham số cũ khi attempt gần nhất failed.
 - `PATCH /api/courses/{course}/learning-objects/{learningObject}` — sửa draft và tạo version.
 - `POST .../{learningObject}/publish` và `/archive` — lifecycle Lecturer owner.
 - `POST .../{learningObject}/quiz-attempts` — Student bắt đầu/retake.
@@ -58,14 +59,15 @@ Luồng Student:
 |---|---|
 | `npm run build` | Pass, Vite build 60 modules |
 | PHP syntax lint | Pass cho controller/model/migration/test mới |
-| `docker compose exec -T ai pytest -q` | **19 passed**, 1 Starlette deprecation warning không chặn |
-| `docker compose exec -T api php vendor/bin/phpunit --testdox` | **23 tests, 136 assertions**, pass |
-| `docker compose ps` | 7 service running; API, AI, MySQL, Chroma, Mailpit healthy |
-| Migration | 20 migration đều `Ran`; 7 migration Sprint 3 ở batch 6 |
+| `docker compose exec -T ai pytest -q` | **20 passed**, 1 Starlette deprecation warning không chặn |
+| `docker compose exec -T api php vendor/bin/phpunit --testdox` | **29 tests, 168 assertions**, pass |
+| `docker compose ps` | 8 service running; API, AI, MySQL, Chroma, Mailpit healthy; hai worker và web running |
+| Migration | 21 migration đều `Ran`; migration generation run ở batch 7 |
 | Chroma | **551 vectors**, giữ nguyên trước/sau rebuild |
 | Gemini thật | `REAL_QUIZ_OK questions=3 grounded_questions=3 retrieval_matches=5 model=gemini-2.5-flash` |
 | Web route | `/lecturer/courses/4/learning-objects` trả SPA HTTP 200 và hiển thị form thật |
 | Browser E2E | Lecturer generate → preview → edit/version 2 → publish; Student workspace → submit → retake |
+| Async generation smoke test | `POST` thật trả **202 trong 135 ms**; `generation-worker` hoàn thành Quiz #2 trong 16 giây, 3 câu/version 1 |
 
 Sau browser E2E, dữ liệu demo được giữ lại để kiểm tra: 1 learning object, 2 versions, 3 questions, 12 options, 2 lượt hoàn thành và 6 attempt answers. Tài liệu/chunk/vector cũ vẫn tồn tại: MySQL có 551 chunks và 551 vector references; Chroma có 551 vectors.
 
@@ -75,6 +77,7 @@ Sau browser E2E, dữ liệu demo được giữ lại để kiểm tra: 1 learn
 - `time_limit_minutes` được lưu và hiển thị nhưng chưa có bộ đếm cưỡng chế hết giờ; không nên demo như tính năng timed assessment hoàn chỉnh.
 - Phiên bản hiện là immutable snapshot phục vụ audit; chưa có chức năng restore một snapshot cũ.
 - Chưa có analytics cấp Lecturer, learning-event tracking tổng quát, anti-cheat hoặc randomization; các phần này thuộc backlog sau.
+- Generation đã chuyển sang background queue nhưng chưa có push notification; trang danh sách poll mỗi 3 giây khi có run đang xử lý.
 - Cần push nhánh, mở PR, chờ hai GitHub checks và review/merge. Không tự điền Actual hours hoặc nhận công thay thành viên trong workbook.
 - API key/token vẫn chỉ nằm trong `.env` ignored. Không đưa chúng vào issue, PR, ảnh hoặc log evidence.
 

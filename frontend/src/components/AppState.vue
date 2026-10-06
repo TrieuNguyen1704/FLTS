@@ -6,7 +6,6 @@ defineEmits(['action'])
 
 <template>
   <div class="app-state" :class="`app-state--${type}`">
-    <div class="app-state__icon">{{ type === 'error' ? '!' : type === 'loading' ? '…' : '○' }}</div>
     <h3>{{ title }}</h3><p>{{ message }}</p>
     <BaseButton v-if="actionLabel" variant="secondary" @click="$emit('action')">{{ actionLabel }}</BaseButton>
   </div>

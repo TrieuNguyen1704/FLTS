@@ -124,14 +124,18 @@ Lưu ý: “boilerplate” không đồng nghĩa “không quan trọng”. Ví 
 | `users` | name, email unique, password hash, role (`lecturer`/`student`/`admin`), `api_token_hash` nullable unique | Lecturer `hasMany` courses; Student `belongsToMany` courses qua enrollment; user upload document. |
 | `courses` | `lecturer_id`, name, code, description | `belongsTo` lecturer; `belongsToMany` students; `hasMany` documents. Xóa lecturer sẽ cascade course. |
 | `course_enrollments` | course_id, student_id, timestamps, unique pair | Pivot cấp quyền Student xem course. Hai foreign key cascade. |
-| `teaching_documents` | course_id, uploaded_by, original/stored name, mime, extension, size, status, error | `belongsTo` course. Tên schema có state `processing`/`processed`/`failed` để dành, nhưng code hiện chỉ tạo pending. |
+| `teaching_documents` | course_id, uploaded_by, original/stored name, mime, extension, size, status, error | `belongsTo` course. Upload tạo pending; queue processing cập nhật processing/processed/failed. |
+| `document_processing_runs`, `document_extractions`, `document_chunks`, `document_vector_references` | Lịch sử xử lý, văn bản chuẩn hóa, chunks và ánh xạ vector Chroma | Cascade theo document/run/chunk; `latest_processing_run_id` giúp UI poll. |
+| `learning_objects`, `learning_object_versions`, `learning_object_generation_runs` | Học liệu, snapshot phiên bản và từng lần chạy generation nền | Course có nhiều learning object; run lưu params/status/error an toàn. |
+| `quizzes`, `quiz_questions`, `quiz_options` | Nội dung Quiz đã được Lecturer kiểm tra | Cascade từ learning object đến Quiz, câu hỏi và lựa chọn. |
+| `quiz_attempts`, `quiz_attempt_answers` | Mọi lượt làm và câu trả lời của Student | Cascade từ Quiz/attempt; giữ latest/best có thể tính lại. |
 
 ## 8. Lệnh vận hành và tác động dữ liệu
 
 | Lệnh (PowerShell, root repo) | Làm gì | Tạo/sửa dữ liệu? |
 |---|---|---|
 | `Copy-Item .env.example .env` | Tạo cấu hình local từ mẫu. Chỉ làm lần đầu hoặc khi muốn reset config. | Tạo `.env`; không tạo DB. |
-| `docker compose up --build -d` | Build image nếu cần và khởi động bốn service. API command chạy migration rồi seeder trước khi serve. | Tạo/cập nhật schema và seed idempotent; giữ volume cũ. |
+| `docker compose up --build -d` | Build image nếu cần và khởi động tám service. API command chạy migration rồi seeder trước khi serve. | Tạo/cập nhật schema và seed idempotent; giữ volume cũ. |
 | `docker compose ps` | Xem trạng thái container. | Không. |
 | `docker compose logs api` | Xem startup/migration/error Laravel. | Không. |
 | `docker compose exec api php vendor/bin/phpunit` | Chạy feature test Laravel. `CreatesApplication.php` ép SQLite in-memory cho test. | Chỉ tạo dữ liệu test tạm trong memory; không xóa user/course MySQL demo. |
@@ -146,14 +150,14 @@ Tài khoản được source seeder đảm bảo: `lecturer@flts.test`, `student
 
 ## 9. Chưa có trong repository hiện tại
 
-- PDF/DOC/DOCX text extraction, OCR, virus scan hoặc background job.
-- Chunking, embedding model, vector database, retrieval hoặc bất kỳ LLM provider nào.
-- RAG chat/answer generation, Quiz generation, publish workflow cho tài liệu/course.
-- Student xem/tải document; endpoint document Sprint 1 đang Lecturer-only.
-- UI để Lecturer chọn/enroll arbitrary Student (API cấp quyền đã có, seeder dùng nó ở mức database); quản lý account/profile/password reset.
-- Analytics, learning progress, statistics, production-grade multi-device session, rate limiting/audit logging.
+- OCR cho PDF ảnh, antivirus/file scanning và đánh giá chất lượng extraction tự động.
+- Flashcard generation, regenerate từng câu/Quiz và restore một version cũ.
+- Countdown cưỡng chế `time_limit_minutes`, randomization, anti-cheat và giới hạn số lần retake.
+- UI để Lecturer chọn/enroll arbitrary Student; API enrollment đã có nhưng frontend chưa cung cấp màn hình quản lý danh sách lớp.
+- Analytics, learning progress dashboard, learning-event tracking, audit log đầy đủ và production-grade multi-device session.
+- Student xem/tải source document; document endpoint hiện vẫn Lecturer-only.
 
-Các status DB tương lai và service FastAPI không phải bằng chứng các tính năng trên đã chạy. Provider LLM, embedding model và vector database vẫn TBD.
+RAG PDF/DOC/DOCX, ChromaDB, Gemini và Quiz vertical slice đã có code/test/evidence như Sections 13–16; không suy rộng chúng thành các mục chưa triển khai ở trên.
 
 ## 10. Câu hỏi thường gặp khi demo
 
@@ -217,3 +221,11 @@ Trong `ai-service/main.py`, hàm `embed()` không gửi toàn bộ document tron
 Phiên bản không phải bản copy rời để Student chọn: nội dung hiện hành nằm trong `quizzes/quiz_questions/quiz_options`, còn `learning_object_versions.content_payload` là snapshot audit sau mỗi lần Lecturer sửa draft. API trả `current_version`; published quiz không còn được edit. Mọi attempt được lưu độc lập, nên latest/best có thể tính lại từ dữ liệu thật.
 
 Chi tiết test và evidence xem `docs/SPRINT_3_EXECUTION_STATUS.md`. Flashcards, Regenerate, restore version, timer cưỡng chế, analytics và learning-event tracking chưa có.
+
+## 16. Quiz background generation và xóa khóa học (06/10/2026)
+
+Luồng tạo Quiz hiện tại: `LearningObjectsView.generateQuiz()` gửi UUID `request_id` → `LearningObjectController@storeQuiz` validate owner/document rồi tạo `LearningObject` + `LearningObjectGenerationRun` → trả HTTP 202 → `GenerateQuizLearningObject` chạy trên queue `generation` → gọi `RagService::generateQuiz()` → FastAPI retrieval/generation → transaction lưu Quiz/question/option/version → Vue gọi `LearningObjectController@show` mỗi 3 giây đến khi `completed` hoặc `failed`. Bảng `learning_object_generation_runs` giữ attempt, tham số, trạng thái và lỗi an toàn; retry tạo attempt mới, không ghi đè lịch sử.
+
+Document ingestion dùng queue `documents`; Quiz dùng queue `generation`. Đây là lý do Compose có hai worker. Trong `ai-service/main.py`, endpoint document đọc upload bất đồng bộ rồi đưa phần extraction/embedding đồng bộ vào `run_in_threadpool()`, tránh retry Gemini dài khóa health check và request Quiz.
+
+Luồng xóa course: `CourseManagementView` yêu cầu nhập đúng code → `courseService.destroy()` → `CourseController@destroy` xác minh Lecturer owner, confirmation và không có processing/generating task → `RagService::deleteCourseVectors()` → xóa file local → xóa course trong transaction. Foreign keys cascade enrollment, document run/chunk/reference, learning object/version/Quiz/question/option/attempt/answer. Nếu Chroma không xóa được, controller trả 503 an toàn trước khi đụng file/database.

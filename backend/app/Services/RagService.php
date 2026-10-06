@@ -55,7 +55,7 @@ class RagService
 
     public function generateQuiz(Course $course, array $parameters): array
     {
-        return $this->unwrap($this->client()->asJson()->post('/internal/v1/generation/quiz', [
+        return $this->unwrap($this->client(120)->asJson()->post('/internal/v1/generation/quiz', [
             'course_id' => $course->id,
             'topic' => $parameters['topic'],
             'difficulty' => $parameters['difficulty'],
@@ -70,13 +70,18 @@ class RagService
         $this->unwrap($this->client()->delete('/internal/v1/documents/'.$document->id.'/vectors'), 'vector cleanup');
     }
 
-    private function client()
+    public function deleteCourseVectors(Course $course): void
+    {
+        $this->unwrap($this->client(30)->delete('/internal/v1/courses/'.$course->id.'/vectors'), 'course vector cleanup');
+    }
+
+    private function client(int $timeout = 600)
     {
         return Http::baseUrl(rtrim((string) config('rag.url'), '/'))
             ->acceptJson()
             ->withToken((string) config('rag.token'))
             ->connectTimeout(5)
-            ->timeout(600);
+            ->timeout($timeout);
     }
 
     private function unwrap(Response $response, string $operation): array

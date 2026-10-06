@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import threading
 from types import SimpleNamespace
 
 import pytest
@@ -41,6 +42,33 @@ def test_missing_service_token_never_falls_back_to_a_predictable_default(monkeyp
     with pytest.raises(HTTPException) as error:
         main.require_service_token('Bearer guessed-example-token')
     assert error.value.status_code == 401
+
+
+def test_document_processing_does_not_block_health_requests(monkeypatch) -> None:
+    started = threading.Event()
+    release = threading.Event()
+
+    def slow_processing(*_: object) -> dict:
+        started.set()
+        release.wait(timeout=3)
+        return {'extraction': {}, 'chunks': [], 'embedding_model': 'test', 'vector_store': {}}
+
+    monkeypatch.setattr(main, 'process_document_content', slow_processing)
+    client = TestClient(main.app)
+    auth_headers = headers(monkeypatch)
+    response_holder: list[object] = []
+
+    thread = threading.Thread(target=lambda: response_holder.append(client.post(
+        '/internal/v1/documents/process', headers=auth_headers,
+        data={'document_id': '1', 'course_id': '1', 'processing_run_id': '1', 'extension': 'pdf', 'mime_type': 'application/pdf'},
+        files={'file': ('chapter.pdf', b'content', 'application/pdf')},
+    )))
+    thread.start()
+    assert started.wait(timeout=1)
+    assert client.get('/health').status_code == 200
+    release.set()
+    thread.join(timeout=2)
+    assert response_holder[0].status_code == 200
 
 
 def test_retry_delay_parses_and_bounds_provider_hints() -> None:
@@ -191,5 +219,9 @@ def test_process_retrieve_filter_and_delete_use_real_chromadb(monkeypatch) -> No
     assert after_delete.status_code == 200
     assert after_delete.json()['matches'] == []
 
-    # Keep the shared local Chroma volume clean after this integration test.
-    client.delete('/internal/v1/documents/990201/vectors', headers=auth_headers)
+    # Course cleanup removes every vector owned by the course and keeps the shared test collection clean.
+    deleted_course = client.delete('/internal/v1/courses/9902/vectors', headers=auth_headers)
+    assert deleted_course.status_code == 200
+    after_course_delete = client.post('/internal/v1/retrieval/search', headers=auth_headers, json={'course_id': 9902, 'query': 'private source', 'top_k': 5})
+    assert after_course_delete.status_code == 200
+    assert after_course_delete.json()['matches'] == []

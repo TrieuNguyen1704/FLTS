@@ -5,4 +5,5 @@ export const courseService = {
   get: (courseId) => apiRequest(`/courses/${courseId}`),
   create: (payload) => apiRequest('/courses', { method: 'POST', body: JSON.stringify(payload) }),
   update: (courseId, payload) => apiRequest(`/courses/${courseId}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  destroy: (courseId, confirmation) => apiRequest(`/courses/${courseId}`, { method: 'DELETE', body: JSON.stringify({ confirmation }) }),
 }

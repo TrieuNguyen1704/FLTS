@@ -38,16 +38,10 @@ async function submit() {
 
 <template>
   <div class="login-page">
-    <section class="login-page__intro">
-      <div class="brand brand--light"><span class="brand__mark">F</span><span>FLTS</span></div>
-      <p class="login-page__eyebrow">HỆ THỐNG HỖ TRỢ HỌC TẬP ĐẢO NGƯỢC</p>
-      <h1>Không gian làm việc số cho học liệu giảng dạy.</h1>
-      <p>Nền tảng tạo lập và quản lý học liệu thông minh cho mô hình Lớp học đảo ngược (Flipped Learning) với sự hỗ trợ của công nghệ RAG.</p>
-    </section>
     <main class="login-card">
-      <p class="eyebrow">CHÀO MỪNG TRỞ LẠI</p>
-      <h2>Đăng nhập vào FLTS</h2>
-      <p class="muted">Nhập thông tin tài khoản của bạn để truy cập không gian làm việc.</p>
+      <div class="brand"><span class="brand__mark">F</span><span>FLTS</span></div>
+      <h1>Đăng nhập</h1>
+      <p class="muted">Sử dụng tài khoản FLTS của bạn.</p>
       <form @submit.prevent="submit">
         <BaseInput v-model="form.email" label="Địa chỉ Email" type="email" placeholder="ten@example.com" required />
         <BaseInput v-model="form.password" label="Mật khẩu" type="password" placeholder="••••••••" required />

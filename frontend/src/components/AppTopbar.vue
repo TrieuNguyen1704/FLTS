@@ -20,12 +20,8 @@ function roleLabel(role) {
 
 <template>
   <header class="topbar">
-    <div>
-      <p class="topbar__eyebrow">HỆ THỐNG HỖ TRỢ HỌC TẬP ĐẢO NGƯỢC</p>
-      <p class="topbar__scope">Không gian làm việc & Quản trị học liệu</p>
-    </div>
+    <strong>FLTS</strong>
     <div class="topbar__account">
-      <div class="avatar">{{ authStore.user.value?.name?.slice(0, 1) || 'U' }}</div>
       <div class="topbar__identity">
         <strong>{{ authStore.user.value?.name }}</strong>
         <span>{{ roleLabel(authStore.user.value?.role) }}</span>

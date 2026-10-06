@@ -17,7 +17,7 @@ defineEmits(['update:modelValue', 'confirm'])
       <section class="modal" role="dialog" aria-modal="true" :aria-label="title">
         <header class="modal__header">
           <h2>{{ title }}</h2>
-          <button class="icon-button" aria-label="Đóng" @click="$emit('update:modelValue', false)">×</button>
+          <button class="text-button" aria-label="Đóng" @click="$emit('update:modelValue', false)">Đóng</button>
         </header>
         <div class="modal__body"><slot /></div>
         <footer class="modal__footer">

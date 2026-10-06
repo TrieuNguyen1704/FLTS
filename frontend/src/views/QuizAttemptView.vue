@@ -61,11 +61,11 @@ onMounted(load)
 </script>
 
 <template>
-  <button class="back-link" @click="router.push({ name: 'student-course', params: { courseId: route.params.courseId } })">← Quay lại không gian học tập</button>
+  <button class="back-link" @click="router.push({ name: 'student-course', params: { courseId: route.params.courseId } })">Quay lại khóa học</button>
   <AppState v-if="loading" type="loading" title="Đang tải Quiz" message="Đang kiểm tra quyền truy cập và lịch sử làm bài." />
   <AppState v-else-if="error && !object" type="error" title="Không thể mở Quiz" :message="error" action-label="Thử lại" @action="load" />
   <template v-else>
-    <section class="page-heading"><div><p class="eyebrow">QUIZ ĐÃ XUẤT BẢN</p><h1>{{ object.title }}</h1><p>{{ object.description || 'Bài kiểm tra kiến thức của khóa học.' }}</p></div></section>
+    <section class="page-heading"><div><h1>{{ object.title }}</h1><p>{{ object.description || 'Bài kiểm tra kiến thức của khóa học.' }}</p></div></section>
     <section class="summary-grid attempt-summary"><article class="summary-card"><span class="summary-card__label">Điểm mới nhất</span><strong>{{ history.latest_score ?? '—' }}</strong><small>trên 100</small></article><article class="summary-card"><span class="summary-card__label">Điểm cao nhất</span><strong>{{ history.best_score ?? '—' }}</strong><small>trên 100</small></article><article class="summary-card"><span class="summary-card__label">Số lần hoàn thành</span><strong>{{ history.attempts.length }}</strong><small>được lưu đầy đủ</small></article></section>
     <section v-if="!attempt" class="learning-panel"><h2>Sẵn sàng làm bài?</h2><p class="muted">Bạn có thể làm lại nhiều lần. Đáp án và giải thích chỉ hiển thị sau khi nộp bài.</p><BaseButton :loading="working" @click="start">Bắt đầu lượt làm mới</BaseButton></section>
     <form v-else class="quiz-attempt" @submit.prevent="submit">

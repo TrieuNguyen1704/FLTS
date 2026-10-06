@@ -214,3 +214,12 @@ Khi **Codex** tiếp nhận công việc, hãy chú ý các định hướng ti�
 - Kiểm chứng: PHPUnit 23 tests/136 assertions; Pytest 19 passed; 7 Compose services running; Chroma giữ 551 vectors; real Gemini tạo 3/3 câu grounded. Browser E2E tạo Learning Object #1 ở Course 4, lưu Version 2, publish, Student làm hai lượt 33.33 và 100.
 - Dữ liệu browser E2E được giữ lại để demo. Không reset volume. Tài liệu bằng chứng đầy đủ: `docs/SPRINT_3_EXECUTION_STATUS.md`.
 - Việc còn lại ngoài code local: push branch, PR, CI/review/merge; không tự điền Actual hours trong workbook. Các giới hạn còn lại gồm timer chưa cưỡng chế, chưa restore version, chưa Flashcards/Regenerate/analytics.
+
+## 12. Codex async generation, course deletion and UI handoff — 06/10/2026
+
+- Đã thay synchronous Quiz generation từng gây cURL timeout 600 giây bằng `learning_object_generation_runs` và `GenerateQuizLearningObject` trên queue riêng `generation`. API trả `202`; Vue poll 3 giây, hiển thị trạng thái/retry; UUID `request_id` làm request idempotent.
+- `ProcessTeachingDocument` chạy queue `documents`; Compose có `queue-worker` và `generation-worker`. FastAPI dùng `run_in_threadpool()` cho extraction/chunk/embed/Chroma write để health và request tương tác không bị khóa bởi retry document dài.
+- Đã thêm `DELETE /api/courses/{course}` và FastAPI `DELETE /internal/v1/courses/{course_id}/vectors`. Chỉ owner Lecturer được xóa, phải nhập chính xác course code; chặn task active; vector failure giữ nguyên course/file; foreign-key cascade xóa enrollment/document/learning object/Quiz/attempt.
+- UI được tinh gọn theo hướng sản phẩm: bỏ icon trang trí, banner/slogan kỹ thuật, workbench RAG khỏi Course Detail, giảm radius/shadow/card lồng nhau; nút và nội dung dùng tiếng Việt theo tác vụ.
+- Evidence: 8 services running; migration 21 ran; PHPUnit 29/167; Pytest 20; Vite production build pass. Smoke test Course 5 tạo Learning Object #2: HTTP `202` sau 135 ms, worker chạy 16 giây và hoàn thành 3 câu/version 1. Volumes không bị reset.
+- Nhánh vẫn là `feature/sprint3-quiz-learning-objects`; cần commit/push, mở PR và chờ CI/review. Không push trực tiếp `main`.

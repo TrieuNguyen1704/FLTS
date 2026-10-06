@@ -70,3 +70,32 @@ select:focus { border-color: #5578de; box-shadow: 0 0 0 3px #5175d31a; }
 input:disabled, textarea:disabled, select:disabled { cursor: not-allowed; background: #f2f4f8; color: #6f7990; }
 @media (max-width: 900px) { .learning-object-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 650px) { .generation-form, .learning-object-grid, .parameter-row, .option-editor { grid-template-columns: 1fr; }.result-banner { display: grid; }.quiz-heading .table-actions { flex-wrap: wrap; } }
+
+/* Product UI uses restrained surfaces and decoration only where it supports a task. */
+.button, input, textarea, select { border-radius: 3px; }
+.button { box-shadow: none; }
+.brand__mark { border-radius: 2px; }
+.sidebar__link { border-radius: 2px; }
+.sidebar__note, .sidebar__icon, .avatar, .app-state__icon, .dropzone__icon { display: none; }
+.topbar { min-height: 62px; padding-top: 10px; padding-bottom: 10px; }
+.topbar__account { margin-left: auto; }
+.page-content { padding-top: 30px; }
+.notice-banner, .summary-card, .course-card, .app-state, .modal, .toast, .dropzone,
+.document-table-wrap, .learning-panel, .question-card, .result-banner, .document-picker,
+.learning-card, .rag-result-card, .evidence-card, .auth-card {
+  border-radius: 3px;
+  box-shadow: none;
+}
+.summary-card { min-height: 112px; }
+.course-card { min-height: 190px; }
+.course-card__code, .count-chip, .role-chip, .status-chip, .status-badge { border-radius: 2px; }
+.learning-panel { border-width: 1px 0; padding: 22px 0; }
+.learning-object-list { border-top: 1px solid #e1e7f2; }
+.learning-object-list .learning-card { min-height: 0; border: 0; border-bottom: 1px solid #e1e7f2; padding: 18px 0; }
+.learning-card__header { margin-bottom: 8px; }
+.link-button--danger { color: #aa2940; }
+.login-page { grid-template-columns: 1fr; place-items: center; background: #f6f7fa; }
+.login-card { width: min(100% - 40px, 420px); border: 1px solid #dfe4ed; padding: 34px; background: #fff; }
+.login-card .brand { margin-bottom: 32px; color: #17275a; }
+.login-card h1 { margin-bottom: 6px; }
+.login-page__intro { display: none; }

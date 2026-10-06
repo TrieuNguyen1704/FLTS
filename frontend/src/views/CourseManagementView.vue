@@ -15,6 +15,10 @@ const loading = ref(true)
 const error = ref('')
 const showCreate = ref(false)
 const saving = ref(false)
+const deleting = ref(false)
+const deleteTarget = ref(null)
+const deleteConfirmation = ref('')
+const deleteError = ref('')
 const form = reactive({ name: '', code: '', description: '' })
 const formErrors = reactive({ name: '', code: '', description: '' })
 
@@ -51,12 +55,10 @@ async function createCourse() {
   saving.value = true
   try {
     const { course } = await courseService.create({
-      name: form.name.trim(),
-      code: form.code.trim(),
-      description: form.description.trim() || null
+      name: form.name.trim(), code: form.code.trim(), description: form.description.trim() || null,
     })
     showCreate.value = false
-    toast.show('Tạo khóa học mới thành công.')
+    toast.show('Đã tạo khóa học.')
     router.push({ name: 'course-detail', params: { id: course.id } })
   } catch (requestError) {
     const errors = requestError.errors || {}
@@ -67,52 +69,60 @@ async function createCourse() {
   }
 }
 
+function openDelete(course) {
+  deleteTarget.value = course
+  deleteConfirmation.value = ''
+  deleteError.value = ''
+}
+
+async function deleteCourse() {
+  if (deleteConfirmation.value !== deleteTarget.value.code) {
+    deleteError.value = `Nhập chính xác mã ${deleteTarget.value.code} để xác nhận.`
+    return
+  }
+  deleting.value = true
+  deleteError.value = ''
+  try {
+    await courseService.destroy(deleteTarget.value.id, deleteConfirmation.value)
+    courses.value = courses.value.filter((course) => course.id !== deleteTarget.value.id)
+    deleteTarget.value = null
+    toast.show('Đã xóa khóa học và dữ liệu liên quan.')
+  } catch (requestError) {
+    deleteError.value = requestError.message || 'Không thể xóa khóa học.'
+  } finally {
+    deleting.value = false
+  }
+}
+
 onMounted(loadCourses)
 </script>
 
 <template>
   <section class="page-heading">
-    <div>
-      <p class="eyebrow">KHÔNG GIAN GIẢNG VIÊN</p>
-      <h1>Quản lý khóa học</h1>
-      <p>Tạo và quản lý các khóa học do bạn phụ trách giảng dạy.</p>
-    </div>
-    <BaseButton @click="openCreate">Tạo khóa học mới</BaseButton>
+    <div><h1>Khóa học</h1><p>Quản lý các khóa học bạn phụ trách.</p></div>
+    <BaseButton @click="openCreate">Tạo khóa học</BaseButton>
   </section>
-  <section v-if="loading" class="course-grid">
-    <div v-for="index in 3" :key="index" class="course-card skeleton" />
-  </section>
-  <section v-else-if="error">
-    <AppState type="error" title="Không thể tải danh sách khóa học" :message="error" action-label="Thử lại" @action="loadCourses" />
-  </section>
+  <section v-if="loading" class="course-grid"><div v-for="index in 3" :key="index" class="course-card skeleton" /></section>
+  <AppState v-else-if="error" type="error" title="Không thể tải danh sách khóa học" :message="error" action-label="Thử lại" @action="loadCourses" />
   <section v-else-if="courses.length" class="course-grid">
     <CourseCard v-for="course in courses" :key="course.id" :course="course">
-      <RouterLink class="inline-link" :to="{ name: 'course-detail', params: { id: course.id } }">
-        Quản lý tài liệu →
-      </RouterLink>
+      <div class="table-actions">
+        <RouterLink class="inline-link" :to="{ name: 'course-detail', params: { id: course.id } }">Mở khóa học</RouterLink>
+        <button class="link-button link-button--danger" @click="openDelete(course)">Xóa</button>
+      </div>
     </CourseCard>
   </section>
-  <AppState
-    v-else
-    title="Danh sách khóa học đang trống"
-    message="Hãy tạo khóa học để bắt đầu tải lên tài liệu học liệu giảng dạy."
-    action-label="Tạo khóa học mới"
-    @action="openCreate"
-  />
-  <AppModal
-    v-model="showCreate"
-    title="Tạo khóa học mới"
-    confirm-label="Tạo khóa học"
-    :loading="saving"
-    @confirm="createCourse"
-  >
-    <p class="muted">Thông tin khóa học sẽ được lưu trực tiếp vào cơ sở dữ liệu hệ thống.</p>
-    <BaseInput v-model="form.name" label="Tên khóa học" placeholder="Ví dụ: Nhập môn Lớp học đảo ngược" :error="formErrors.name" required />
+  <AppState v-else title="Chưa có khóa học" message="Tạo khóa học đầu tiên để bắt đầu." action-label="Tạo khóa học" @action="openCreate" />
+
+  <AppModal v-model="showCreate" title="Tạo khóa học" confirm-label="Tạo khóa học" :loading="saving" @confirm="createCourse">
+    <BaseInput v-model="form.name" label="Tên khóa học" placeholder="Nhập tên khóa học" :error="formErrors.name" required />
     <BaseInput v-model="form.code" label="Mã khóa học" placeholder="Ví dụ: FLIP-101" :error="formErrors.code" required />
-    <label class="field">
-      <span class="field__label">Mô tả khóa học</span>
-      <textarea v-model="form.description" maxlength="2000" placeholder="Nhập mô tả ngắn gọn về khóa học cho không gian làm việc..." />
-      <span v-if="formErrors.description" class="field__error">{{ formErrors.description }}</span>
-    </label>
+    <label class="field"><span class="field__label">Mô tả</span><textarea v-model="form.description" maxlength="2000" placeholder="Mô tả ngắn về khóa học" /></label>
+  </AppModal>
+
+  <AppModal v-if="deleteTarget" :model-value="true" title="Xóa khóa học" confirm-label="Xóa vĩnh viễn" danger :loading="deleting" @update:model-value="deleteTarget = null" @confirm="deleteCourse">
+    <p>Thao tác này xóa tài liệu, Quiz, lịch sử làm bài và quyền truy cập của sinh viên trong khóa học.</p>
+    <p>Nhập mã <strong>{{ deleteTarget.code }}</strong> để xác nhận.</p>
+    <BaseInput v-model="deleteConfirmation" label="Mã khóa học" :placeholder="deleteTarget.code" :error="deleteError" />
   </AppModal>
 </template>
