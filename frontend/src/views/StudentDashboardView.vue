@@ -43,7 +43,7 @@ onMounted(loadCourses)
   </section>
   <section v-else-if="courses.length" class="course-grid">
     <CourseCard v-for="course in courses" :key="course.id" :course="course" compact>
-      <span class="course-card__access">Đã tham gia</span>
+      <RouterLink class="inline-link" :to="{ name: 'student-course', params: { courseId: course.id } }">Mở không gian học tập</RouterLink>
     </CourseCard>
   </section>
   <AppState

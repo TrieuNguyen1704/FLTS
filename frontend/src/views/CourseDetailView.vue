@@ -209,6 +209,7 @@ onMounted(loadCourse)
         <span>Giảng viên phụ trách</span>
         <strong>{{ course.lecturer?.name || 'Bạn' }}</strong>
         <BaseButton variant="secondary" @click="openEdit">Chỉnh sửa khóa học</BaseButton>
+        <RouterLink class="button" :to="{ name: 'learning-objects', params: { courseId: course.id } }">Tạo và quản lý Quiz</RouterLink>
       </div>
     </section>
     <section class="notice-banner">

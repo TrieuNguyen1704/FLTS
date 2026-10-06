@@ -14,6 +14,14 @@ For the Lecturer's evidence-backed response, the AI receives only the current co
 
 For the repeatable live-provider verification procedure and the record fields required at Sprint Review, use [the Sprint 2 E2E evidence runbook](docs/SPRINT_2_E2E_EVIDENCE.md).
 
+## Sprint 3 Quiz learning objects (06/10/2026)
+
+The current Sprint 3 branch adds the core Quiz learning-object vertical slice: grounded Quiz generation, strict structured-output validation, Lecturer preview/edit/version/publish, Student published-course workspace, attempts, scoring, immediate grounded feedback and retakes with latest/best scores. See [the verified Sprint 3 implementation status](docs/SPRINT_3_EXECUTION_STATUS.md).
+
+Lecturer flow: open a processed course document, select **Tạo và quản lý Quiz**, generate a draft, review/edit it, then publish. Student flow: open **Khóa học của tôi**, choose a course and published Quiz, submit answers, review explanations/citations and retake when needed.
+
+PB25 Flashcards and PB32 Regenerate remain stretch goals and are not implemented. Time limits are stored as Quiz metadata but are not yet enforced by a countdown timer.
+
 After `Copy-Item .env.example .env`, edit the ignored `.env` and set a newly generated `GEMINI_API_KEY`; the key must never be committed. Also set a different high-entropy `AI_SERVICE_TOKEN` for this local stack. Without either value, containers still start, but internal RAG requests intentionally fail instead of using a predictable default or pretending they succeeded.
 
 ## Yêu cầu
@@ -55,6 +63,7 @@ Khóa học `FLIP-101` đã được cấp quyền cho `student@flts.test`.
 Invoke-RestMethod http://localhost:8000/api/health
 Invoke-RestMethod http://localhost:8001/health
 docker compose exec api php vendor/bin/phpunit
+docker compose exec ai pytest -q
 ```
 
 Laravel API ở `http://localhost:8000/api`; giao diện Vue ở `http://localhost:8080`. Giao diện proxy `/api` vào Laravel nên không cần cấu hình CORS cho demo local.

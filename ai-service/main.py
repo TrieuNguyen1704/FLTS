@@ -5,7 +5,7 @@ import logging
 import os
 import re
 import time
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 import chromadb
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
@@ -137,7 +137,7 @@ def embed(contents: list[str], task_type: str) -> list[list[float]]:
 class SearchRequest(BaseModel):
     course_id: int
     query: str = Field(min_length=3, max_length=2000)
-    top_k: int = Field(default=5, ge=1, le=10)
+    top_k: int = Field(default=5, ge=1, le=15)
     document_ids: list[int] = Field(default_factory=list)
 
 
@@ -162,6 +162,50 @@ class EvidenceDraft(BaseModel):
     answer: str
     citation_indexes: list[int] = Field(min_length=1)
     limitations: str
+
+
+class QuizGenerationRequest(BaseModel):
+    course_id: int
+    topic: str = Field(min_length=3, max_length=500)
+    difficulty: Literal['easy', 'medium', 'hard'] = 'medium'
+    question_count: int = Field(default=5, ge=3, le=20)
+    document_ids: list[int] = Field(default_factory=list)
+    top_k: int = Field(default=8, ge=3, le=15)
+
+
+class QuizQuestionDraft(BaseModel):
+    question: str = Field(min_length=3, max_length=2000)
+    options: list[str] = Field(min_length=4, max_length=4)
+    correct_index: int = Field(ge=0, le=3)
+    explanation: str = Field(min_length=3, max_length=4000)
+    citation_indexes: list[int] = Field(min_length=1)
+
+
+class QuizDraft(BaseModel):
+    title: str = Field(min_length=3, max_length=255)
+    description: str = Field(default='', max_length=2000)
+    questions: list[QuizQuestionDraft] = Field(min_length=3, max_length=20)
+
+
+class QuizCitation(BaseModel):
+    vector_id: str
+    source_locator: str | None = None
+    document_id: int
+    document_name: str
+
+
+class QuizQuestionOutput(BaseModel):
+    question: str
+    options: list[str]
+    correct_index: int
+    explanation: str
+    citations: list[QuizCitation]
+
+
+class QuizOutput(BaseModel):
+    title: str
+    description: str
+    questions: list[QuizQuestionOutput]
 
 
 def redact_sensitive_text(value: str) -> str:
@@ -281,6 +325,76 @@ def generate_evidence(request: EvidenceRequest) -> dict[str, Any]:
         citations=[Citation(vector_id=matches[index - 1]['vector_id'], source_locator=matches[index - 1]['source_locator']) for index in selected_indexes],
     )
     return {'evidence': output.model_dump(), 'retrieval': retrieved}
+
+
+@APP.post('/internal/v1/generation/quiz', dependencies=[Depends(require_service_token)])
+def generate_quiz(request: QuizGenerationRequest) -> dict[str, Any]:
+    retrieved = search_collection(SearchRequest(
+        course_id=request.course_id,
+        query=request.topic,
+        top_k=request.top_k,
+        document_ids=request.document_ids,
+    ))
+    matches = retrieved['matches']
+    if not matches:
+        raise PipelineError('NO_GROUNDED_CONTEXT', 'No processed chunks matched this quiz topic.', 'generation', 422)
+    context = '\n\n'.join(f'[Source {index}] {match["content"]}' for index, match in enumerate(matches, start=1))
+    instruction = (
+        'Create a Vietnamese single-choice quiz using only the numbered source chunks below. '
+        f'Generate exactly {request.question_count} questions at {request.difficulty} difficulty about: {request.topic}. '
+        'Each question must have exactly four distinct options, one correct_index, a source-grounded explanation, '
+        'and one or more citation_indexes containing only supplied Source numbers. Do not use outside knowledge. '
+        f'\n\nSource chunks:\n{context}'
+    )
+    try:
+        client = gemini_client()
+        response = client.models.generate_content(
+            model=GENERATION_MODEL,
+            contents=instruction,
+            config=types.GenerateContentConfig(response_mime_type='application/json', response_schema=QuizDraft.model_json_schema()),
+        )
+        draft = QuizDraft.model_validate(json.loads(response.text))
+    except PipelineError:
+        raise
+    except Exception as exc:
+        LOGGER.exception('Gemini quiz-generation request failed')
+        if is_rate_limited(exc):
+            raise PipelineError('GEMINI_RATE_LIMITED', 'Gemini is temporarily rate limited. Please retry shortly.', 'generation', 429) from exc
+        raise PipelineError('QUIZ_GENERATION_FAILED', 'Gemini could not generate a valid quiz.', 'generation', 502) from exc
+
+    if len(draft.questions) != request.question_count:
+        raise PipelineError('QUIZ_SCHEMA_INVALID', 'Gemini returned a different number of questions than requested.', 'generation', 502)
+    output_questions: list[QuizQuestionOutput] = []
+    for question in draft.questions:
+        if len({option.strip().casefold() for option in question.options}) != 4 or any(not option.strip() for option in question.options):
+            raise PipelineError('QUIZ_SCHEMA_INVALID', 'Every quiz question must contain four distinct non-empty options.', 'generation', 502)
+        if any(index < 1 or index > len(matches) for index in question.citation_indexes):
+            raise PipelineError('UNGROUNDABLE_CITATION', 'Gemini returned a quiz citation outside the retrieved source set.', 'generation', 502)
+        selected_indexes = list(dict.fromkeys(question.citation_indexes))
+        citations = [QuizCitation(
+            vector_id=matches[index - 1]['vector_id'],
+            source_locator=matches[index - 1]['source_locator'],
+            document_id=matches[index - 1]['document_id'],
+            document_name=matches[index - 1]['document_name'],
+        ) for index in selected_indexes]
+        output_questions.append(QuizQuestionOutput(
+            question=question.question,
+            options=question.options,
+            correct_index=question.correct_index,
+            explanation=question.explanation,
+            citations=citations,
+        ))
+    output = QuizOutput(title=draft.title, description=draft.description, questions=output_questions)
+    return {
+        'quiz': output.model_dump(),
+        'retrieval': {
+            'query': retrieved['query'],
+            'match_count': len(matches),
+            'embedding_model': retrieved['embedding_model'],
+            'collection': retrieved['collection'],
+        },
+        'generation_model': GENERATION_MODEL,
+    }
 
 
 @APP.delete('/internal/v1/documents/{document_id}/vectors', dependencies=[Depends(require_service_token)])

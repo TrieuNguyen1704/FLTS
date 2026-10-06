@@ -207,3 +207,13 @@ Các bảng mới cần hiểu là `document_processing_runs` (mỗi lần thử
 Trong `ai-service/main.py`, hàm `embed()` không gửi toàn bộ document trong một request: nó chia chunk theo `GEMINI_EMBEDDING_BATCH_SIZE` (mặc định 40), tạo một `types.Content` cho mỗi chunk, rồi gọi Gemini theo từng batch. Nếu provider trả `429`/`RESOURCE_EXHAUSTED`, `extract_retry_delay()` đọc gợi ý thời gian chờ, giới hạn trong 15–60 giây và thử lại tối đa `GEMINI_EMBEDDING_MAX_RETRIES` lần (mặc định 15). Việc này nhằm tránh payload quá lớn và không biến rate limit tạm thời thành `processed` giả.
 
 `ProcessTeachingDocument::$timeout`, queue-worker `--timeout` và HTTP client đều đang là 600 giây để phù hợp với retry. Đây là thông số demo, không phải SLA production; file rất lớn vẫn có thể cần hàng đợi/timeout policy riêng. Khi lỗi provider xảy ra, FastAPI log chi tiết nội bộ nhưng trả Laravel một thông điệp an toàn, nhờ vậy UI không hiển thị raw provider diagnostics.
+
+## 15. Đường đọc code Sprint 3 — Quiz Learning Object (06/10/2026)
+
+Đọc theo chuỗi sau: `frontend/src/views/LearningObjectsView.vue` → `frontend/src/services/learningObjectService.js` → `backend/routes/api.php` → `LearningObjectController` → `RagService::generateQuiz()` → `ai-service/main.py::generate_quiz()` → các model/migration `LearningObject`, `Quiz*` → `QuizAttemptController` → `StudentCourseView.vue` và `QuizAttemptView.vue`.
+
+Điểm phân quyền quan trọng: Vue guard chỉ điều hướng giao diện. Laravel middleware/controller mới là authority: Lecturer phải sở hữu course; Student phải có enrollment; Student chỉ nhận object `published`. API Student không serialize `is_correct`, explanation hoặc citations trước khi nộp. Khi submit, controller còn kiểm tra option được chọn thuộc đúng question để tránh giả mạo ID.
+
+Phiên bản không phải bản copy rời để Student chọn: nội dung hiện hành nằm trong `quizzes/quiz_questions/quiz_options`, còn `learning_object_versions.content_payload` là snapshot audit sau mỗi lần Lecturer sửa draft. API trả `current_version`; published quiz không còn được edit. Mọi attempt được lưu độc lập, nên latest/best có thể tính lại từ dữ liệu thật.
+
+Chi tiết test và evidence xem `docs/SPRINT_3_EXECUTION_STATUS.md`. Flashcards, Regenerate, restore version, timer cưỡng chế, analytics và learning-event tracking chưa có.

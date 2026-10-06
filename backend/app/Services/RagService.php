@@ -53,6 +53,18 @@ class RagService
         ]), 'evidence generation');
     }
 
+    public function generateQuiz(Course $course, array $parameters): array
+    {
+        return $this->unwrap($this->client()->asJson()->post('/internal/v1/generation/quiz', [
+            'course_id' => $course->id,
+            'topic' => $parameters['topic'],
+            'difficulty' => $parameters['difficulty'],
+            'question_count' => $parameters['question_count'],
+            'document_ids' => array_values($parameters['document_ids'] ?? []),
+            'top_k' => $parameters['top_k'],
+        ]), 'quiz generation');
+    }
+
     public function deleteDocumentVectors(TeachingDocument $document): void
     {
         $this->unwrap($this->client()->delete('/internal/v1/documents/'.$document->id.'/vectors'), 'vector cleanup');
