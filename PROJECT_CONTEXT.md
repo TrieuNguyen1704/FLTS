@@ -1169,3 +1169,27 @@ This records implementation and local runtime evidence on branch `feature/sprint
 - An owning Lecturer can permanently delete a course from `/lecturer/courses` only after entering the exact course code. Laravel blocks deletion while document/Quiz processing is active, cleans Chroma vectors by course, removes stored source files, then cascades relational data. A vector-cleanup failure leaves the course, database records and files intact.
 - The product UI removes the Course Detail retrieval workbench, decorative icons, technical slogans/banners and excessive rounded/shadowed containers. Internal Sprint 2 retrieval/evidence endpoints remain available for integration tests but are not presented as a main product screen.
 - Verified without resetting MySQL or Chroma volumes: eight Compose services running; migration `000021` ran; PHPUnit **29 tests/168 assertions**; Pytest **20 passed**; a real Quiz request returned `202` in 135 ms and its worker completed three questions in 16 seconds.
+
+## 34. Sprint 3 Background Task Center, Student Enrollment & UI Redesign — 2026-10-06
+
+- **Branch:** `feature/sprint3-ux-enrollment-progress` branched off `4892115`.
+- **Background Task Center:**
+  - Global `GET /api/background-tasks` combines `DocumentProcessingRun` and `LearningObjectGenerationRun` for courses owned by the authenticated Lecturer.
+  - Centralized store polling in `backgroundTasks.js` uses 3.5s interval during active jobs and 15s when idle; pauses on `visibilitychange` hidden and triggers an immediate refresh on visible.
+  - Exactly one toast is emitted per completion or failure using a status transition tracker.
+  - UI slide-over drawer in `BackgroundTaskCenter.vue` mounted in `AppTopbar.vue` presents indeterminate progress bars with real backend stages (no fake percentages), safe error messages, retry triggers, and direct navigation links.
+- **Student Enrollment Management:**
+  - `GET /api/courses/{course}/students`: returns enrolled students with their attempt counts.
+  - `GET /api/courses/{course}/students/available`: returns searchable active students not yet enrolled in the course.
+  - `POST /api/courses/{course}/enrollments`: validates `student` role and active account status.
+  - `DELETE /api/courses/{course}/enrollments/{student}`: detaches student access while preserving all historical `quiz_attempts` and submissions.
+  - Strict RBAC: only the course's owning Lecturer can view or manage enrollments; other lecturers/students receive HTTP 403.
+- **UI Structure & Education-Focused Styling:**
+  - `CourseDetailView.vue` reorganized into four dedicated tabs: "Tổng quan", "Tài liệu", "Quiz trắc nghiệm", and "Sinh viên", synchronized with the `?tab=` route query.
+  - Accurate metrics on `LecturerDashboardView.vue` and clean responsive layout across desktop and mobile.
+- **Runtime Verification:**
+  - PHPUnit test suite: **33 tests / 195 assertions PASSED**.
+  - FastAPI Pytest: **20 tests PASSED**.
+  - Frontend production build: Vite build successful (67 modules).
+  - ChromaDB vector count: **551 vectors intact**.
+  - All 8 Compose containers running and healthy. Live API end-to-end verified with real database records.

@@ -55,6 +55,47 @@ class CourseController
         return response()->json(['course' => $course]);
     }
 
+    public function students(Request $request, Course $course): JsonResponse
+    {
+        $this->ensureOwner($request, $course);
+        $students = $course->students()
+            ->select('users.id', 'users.name', 'users.email', 'users.account_status', 'course_enrollments.created_at as enrolled_at')
+            ->withCount(['quizAttempts as attempts_count' => function ($query) use ($course) {
+                $query->whereHas('quiz.learningObject', function ($q) use ($course) {
+                    $q->where('course_id', $course->id);
+                });
+            }])
+            ->orderBy('course_enrollments.created_at', 'desc')
+            ->get();
+
+        return response()->json(['students' => $students]);
+    }
+
+    public function availableStudents(Request $request, Course $course): JsonResponse
+    {
+        $this->ensureOwner($request, $course);
+        $search = trim((string) $request->query('q', ''));
+
+        $query = User::query()
+            ->where('role', 'student')
+            ->where('account_status', 'active')
+            ->whereNotIn('id', $course->students()->select('users.id'));
+
+        if ($search !== '') {
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                    ->orWhere('email', 'like', "%{$search}%");
+            });
+        }
+
+        $students = $query->select('id', 'name', 'email')
+            ->orderBy('name')
+            ->limit(30)
+            ->get();
+
+        return response()->json(['students' => $students]);
+    }
+
     public function enroll(Request $request, Course $course): JsonResponse
     {
         $this->ensureOwner($request, $course);
@@ -63,8 +104,29 @@ class CourseController
         if ($student->role !== 'student') {
             return response()->json(['message' => 'Only Student accounts can be enrolled.'], 422);
         }
+        if ($student->account_status !== 'active') {
+            return response()->json(['message' => 'Chỉ có thể ghi danh tài khoản sinh viên đang hoạt động.'], 422);
+        }
         $course->students()->syncWithoutDetaching([$student->id]);
-        return response()->json(['message' => 'Student granted course access.']);
+        return response()->json([
+            'message' => 'Student granted course access.',
+            'student' => [
+                'id' => $student->id,
+                'name' => $student->name,
+                'email' => $student->email,
+                'account_status' => $student->account_status,
+            ],
+        ]);
+    }
+
+    public function unenroll(Request $request, Course $course, User $student): JsonResponse
+    {
+        $this->ensureOwner($request, $course);
+        if (!$course->students()->where('users.id', $student->id)->exists()) {
+            return response()->json(['message' => 'Sinh viên không có trong khóa học này.'], 404);
+        }
+        $course->students()->detach($student->id);
+        return response()->json(['message' => 'Đã hủy ghi danh sinh viên khỏi khóa học.']);
     }
 
     public function destroy(Request $request, Course $course, RagService $rag): JsonResponse

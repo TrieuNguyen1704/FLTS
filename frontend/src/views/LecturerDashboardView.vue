@@ -6,10 +6,12 @@ import BaseButton from '../components/BaseButton.vue'
 import CourseCard from '../components/CourseCard.vue'
 import { courseService } from '../services/courseService'
 import { documentService } from '../services/documentService'
+import { learningObjectService } from '../services/learningObjectService'
 
 const router = useRouter()
 const courses = ref([])
 const documentCount = ref(0)
+const quizCount = ref(0)
 const loading = ref(true)
 const error = ref('')
 const recentCourses = computed(() => courses.value.slice(0, 3))
@@ -19,8 +21,12 @@ async function loadDashboard() {
   error.value = ''
   try {
     courses.value = (await courseService.list()).courses
-    const documents = await Promise.all(courses.value.map((course) => documentService.list(course.id)))
+    const [documents, quizzes] = await Promise.all([
+      Promise.all(courses.value.map((course) => documentService.list(course.id))),
+      Promise.all(courses.value.map((course) => learningObjectService.list(course.id))),
+    ])
     documentCount.value = documents.reduce((total, result) => total + result.documents.length, 0)
+    quizCount.value = quizzes.reduce((total, result) => total + (result.learning_objects?.length || 0), 0)
   } catch (requestError) {
     error.value = requestError.message || 'Không thể tải dữ liệu bảng điều khiển.'
   } finally {
@@ -55,9 +61,9 @@ onMounted(loadDashboard)
         <small>Tài liệu giảng dạy đã lưu</small>
       </article>
       <article class="summary-card">
-        <span class="summary-card__label">Học liệu sẵn sàng</span>
-        <strong>{{ courses.length ? documentCount : 0 }}</strong>
-        <small>Tài liệu trong khóa học</small>
+        <span class="summary-card__label">Bài kiểm tra Quiz</span>
+        <strong>{{ quizCount }}</strong>
+        <small>Bộ câu hỏi trắc nghiệm đã tạo</small>
       </article>
     </section>
     <section class="content-section">

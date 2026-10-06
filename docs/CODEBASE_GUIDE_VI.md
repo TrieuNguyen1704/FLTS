@@ -153,11 +153,11 @@ Tài khoản được source seeder đảm bảo: `lecturer@flts.test`, `student
 - OCR cho PDF ảnh, antivirus/file scanning và đánh giá chất lượng extraction tự động.
 - Flashcard generation, regenerate từng câu/Quiz và restore một version cũ.
 - Countdown cưỡng chế `time_limit_minutes`, randomization, anti-cheat và giới hạn số lần retake.
-- UI để Lecturer chọn/enroll arbitrary Student; API enrollment đã có nhưng frontend chưa cung cấp màn hình quản lý danh sách lớp.
-- Analytics, learning progress dashboard, learning-event tracking, audit log đầy đủ và production-grade multi-device session.
+- Push notification thời gian thực qua WebSocket (hệ thống hiện dùng polling thông minh 3.5s/15s theo tab visibility).
+- Analytics chuyên sâu đa chiều, learning-event tracking tổng thể, audit log đầy đủ và production-grade multi-device session.
 - Student xem/tải source document; document endpoint hiện vẫn Lecturer-only.
 
-RAG PDF/DOC/DOCX, ChromaDB, Gemini và Quiz vertical slice đã có code/test/evidence như Sections 13–16; không suy rộng chúng thành các mục chưa triển khai ở trên.
+RAG PDF/DOC/DOCX, ChromaDB, Gemini, Quiz vertical slice, Background Task Center và Quản lý sinh viên (Enrollment Management) đã có code/test/evidence đầy đủ; không suy rộng chúng thành các mục chưa triển khai ở trên.
 
 ## 10. Câu hỏi thường gặp khi demo
 

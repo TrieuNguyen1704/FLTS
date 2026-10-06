@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\AdminUserController;
+use App\Http\Controllers\BackgroundTaskController;
 use App\Http\Controllers\CourseController;
 use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\DocumentProcessingController;
@@ -26,7 +27,11 @@ Route::middleware('auth.token')->group(function () {
     Route::post('/courses', [CourseController::class, 'store'])->middleware('role:lecturer');
     Route::patch('/courses/{course}', [CourseController::class, 'update'])->middleware('role:lecturer');
     Route::delete('/courses/{course}', [CourseController::class, 'destroy'])->middleware('role:lecturer');
+    Route::get('/courses/{course}/students', [CourseController::class, 'students'])->middleware('role:lecturer');
+    Route::get('/courses/{course}/students/available', [CourseController::class, 'availableStudents'])->middleware('role:lecturer');
     Route::post('/courses/{course}/enrollments', [CourseController::class, 'enroll'])->middleware('role:lecturer');
+    Route::delete('/courses/{course}/enrollments/{student}', [CourseController::class, 'unenroll'])->middleware('role:lecturer');
+    Route::get('/background-tasks', [BackgroundTaskController::class, 'index'])->middleware('role:lecturer');
     // Documents remain lecturer-only in Sprint 1; student delivery is not implemented yet.
     Route::get('/courses/{course}/documents', [DocumentController::class, 'index'])->middleware('role:lecturer');
     Route::post('/courses/{course}/documents', [DocumentController::class, 'store'])->middleware('role:lecturer');
