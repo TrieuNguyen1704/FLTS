@@ -368,9 +368,11 @@ def generate_quiz(request: QuizGenerationRequest) -> dict[str, Any]:
         f'- Topic: {request.topic}\n'
         f'- Question count: {request.question_count} | Difficulty: {request.difficulty}\n\n'
         'REQUIREMENTS:\n'
-        '1. Grounding: Rely strictly on the provided source chunks. Each question must include valid citation_indexes referencing the supporting [Source] numbers.\n'
-        '2. Natural Presentation & Normalization: Write clear, unambiguous Vietnamese. Automatically normalize discipline-specific notation, formulas (wrap math/science expressions in $...$), and legacy font/encoding artifacts from source text.\n'
-        '3. Strict Structure: Each question must have exactly four distinct options, one zero-based correct_index (0-3), and an evidence-backed explanation.\n\n'
+        '1. Grounding: Rely strictly on the conceptual facts in the provided source chunks. Each question must include valid citation_indexes referencing the supporting [Source] numbers.\n'
+        '2. Formula & Notation Auditing (Auto-Correction): Textbooks may contain typos, font encoding artifacts, missing brackets, or malformed expressions. NEVER copy broken or garbled formulas verbatim. Intelligently detect, correct, and restore all mathematical, logical, chemical, or technical notations to their canonical, mathematically sound forms.\n'
+        '3. LaTeX Formatting: Enclose all mathematical notations, equations, variables, set operations, and expressions in standard LaTeX using $...$ (or $$...$$ for block display) in question text, options, and explanations.\n'
+        '4. Natural Presentation: Use clear, unambiguous, high-quality Vietnamese. Ensure questions and options are pedagogically sound and logically consistent.\n'
+        '5. Strict Structure: Each question must have exactly four distinct options, one zero-based correct_index (0-3), and an evidence-backed explanation.\n\n'
         f'Source chunks:\n{context}'
     )
     try:
