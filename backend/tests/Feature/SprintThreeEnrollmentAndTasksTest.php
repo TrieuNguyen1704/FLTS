@@ -228,4 +228,62 @@ class SprintThreeEnrollmentAndTasksTest extends TestCase
         // Student cannot access background tasks
         $this->withToken($studentToken)->getJson('/api/background-tasks')->assertForbidden();
     }
+
+    public function test_student_can_join_course_by_code_and_lecturer_can_manage_code(): void
+    {
+        [$owner, $ownerToken] = $this->createLecturer();
+        [$other, $otherToken] = $this->createLecturer('other_lec@flts.local');
+        [$student, $studentToken] = $this->createStudent('student_joiner@flts.local');
+        [$suspendedStudent, $suspendedToken] = $this->createStudent('suspended_joiner@flts.local', 'suspended');
+
+        $course = Course::create([
+            'lecturer_id' => $owner->id,
+            'name' => 'Discrete Math',
+            'code' => 'MTH-254',
+            'enrollment_code' => 'MATH-1234',
+            'is_enrollment_open' => true,
+        ]);
+
+        // 1. Student joins with invalid code
+        $this->withToken($studentToken)->postJson('/api/courses/join', ['code' => 'WRONG-CODE'])
+            ->assertNotFound();
+
+        // 2. Suspended student token is rejected with 401
+        $this->withToken($suspendedToken)->postJson('/api/courses/join', ['code' => 'MATH-1234'])
+            ->assertUnauthorized();
+
+        // 3. Active student joins successfully
+        $res = $this->withToken($studentToken)->postJson('/api/courses/join', ['code' => 'MATH-1234']);
+        $res->assertOk();
+        $this->assertTrue($course->students()->where('users.id', $student->id)->exists());
+
+        // 4. Joining again is idempotent
+        $resAgain = $this->withToken($studentToken)->postJson('/api/courses/join', ['code' => 'MATH-1234']);
+        $resAgain->assertOk();
+
+        // 5. Non-owner cannot toggle or regenerate code
+        $this->withToken($otherToken)->patchJson("/api/courses/{$course->id}/enrollment-code/toggle")->assertForbidden();
+        $this->withToken($otherToken)->postJson("/api/courses/{$course->id}/enrollment-code/regenerate")->assertForbidden();
+
+        // 6. Owner toggles enrollment closed
+        $toggleRes = $this->withToken($ownerToken)->patchJson("/api/courses/{$course->id}/enrollment-code/toggle");
+        $toggleRes->assertOk()->assertJsonPath('is_enrollment_open', false);
+
+        [$student2, $studentToken2] = $this->createStudent('student2@flts.local');
+        $this->withToken($studentToken2)->postJson('/api/courses/join', ['code' => 'MATH-1234'])
+            ->assertStatus(422);
+
+        // 7. Owner re-opens and regenerates code
+        $this->withToken($ownerToken)->patchJson("/api/courses/{$course->id}/enrollment-code/toggle")->assertOk();
+        $regenRes = $this->withToken($ownerToken)->postJson("/api/courses/{$course->id}/enrollment-code/regenerate");
+        $regenRes->assertOk();
+        $newCode = $regenRes->json('enrollment_code');
+        $this->assertNotEmpty($newCode);
+        $this->assertNotSame('MATH-1234', $newCode);
+
+        // Old code fails, new code succeeds
+        $this->withToken($studentToken2)->postJson('/api/courses/join', ['code' => 'MATH-1234'])->assertNotFound();
+        $this->withToken($studentToken2)->postJson('/api/courses/join', ['code' => $newCode])->assertOk();
+        $this->assertTrue($course->students()->where('users.id', $student2->id)->exists());
+    }
 }

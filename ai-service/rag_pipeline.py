@@ -106,6 +106,15 @@ def clean_text(value: str) -> str:
     normalized = unicodedata.normalize('NFKC', value).replace('\x00', '')
     # Email addresses in copied headers/footers are not useful retrieval context and should not be shown to learners.
     normalized = re.sub(r'(?i)\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b', '[redacted-email]', normalized)
+    # Normalize common legacy symbol-font misencodings in academic texts (e.g. Word/MathType Symbol font)
+    # when appearing as binary operators or set relations between symbols or words:
+    # 0xC8 -> È -> union (∪), 0xC7 -> Ç -> intersection (∩)
+    normalized = re.sub(r'(?<=[A-Za-z0-9\)\}\| ])\s*È\s*(?=[A-Za-z0-9\(\{\| ])', ' ∪ ', normalized)
+    normalized = re.sub(r'(?<=[A-Za-z0-9\)\}\| ])\s*Ç\s*(?=[A-Za-z0-9\(\{\| ])', ' ∩ ', normalized)
+    normalized = re.sub(r'(?<=[A-Za-z0-9\)\}\| ])\s*Î\s*(?=[A-Za-z0-9\(\{\| ])', ' ∈ ', normalized)
+    normalized = re.sub(r'(?<=[A-Za-z0-9\)\}\| ])\s*Ï\s*(?=[A-Za-z0-9\(\{\| ])', ' ∉ ', normalized)
+    normalized = re.sub(r'(?<=[A-Za-z0-9\)\}\| ])\s*Ì\s*(?=[A-Za-z0-9\(\{\| ])', ' ⊂ ', normalized)
+    normalized = re.sub(r'(?<=[A-Za-z0-9\)\}\| ])\s*Í\s*(?=[A-Za-z0-9\(\{\| ])', ' ⊆ ', normalized)
     normalized = re.sub(r'[\t\r ]+', ' ', normalized)
     normalized = re.sub(r' *\n *', '\n', normalized)
     return re.sub(r'\n{3,}', '\n\n', normalized).strip()

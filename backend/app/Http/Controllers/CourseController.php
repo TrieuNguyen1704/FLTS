@@ -9,6 +9,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Throwable;
 
 class CourseController
@@ -127,6 +128,71 @@ class CourseController
         }
         $course->students()->detach($student->id);
         return response()->json(['message' => 'Đã hủy ghi danh sinh viên khỏi khóa học.']);
+    }
+
+    public function join(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        abort_unless($user->role === 'student', 403, 'Chỉ tài khoản sinh viên mới có thể tham gia khóa học.');
+        if ($user->account_status !== 'active') {
+            return response()->json(['message' => 'Tài khoản của bạn đang bị tạm khóa.'], 422);
+        }
+
+        $data = $request->validate([
+            'code' => ['nullable', 'string', 'max:32'],
+            'enrollment_code' => ['nullable', 'string', 'max:32'],
+        ]);
+        $inputCode = trim($data['code'] ?? $data['enrollment_code'] ?? '');
+        if (empty($inputCode)) {
+            return response()->json(['message' => 'Vui lòng cung cấp mã ghi danh.'], 422);
+        }
+
+        $course = Course::where('enrollment_code', $inputCode)->first();
+        if (!$course) {
+            return response()->json(['message' => 'Mã tham gia không hợp lệ hoặc không tồn tại.'], 404);
+        }
+
+        if (!$course->is_enrollment_open) {
+            return response()->json(['message' => 'Khóa học này hiện đã đóng nhận sinh viên mới.'], 422);
+        }
+
+        if ($course->students()->where('users.id', $user->id)->exists()) {
+            return response()->json([
+                'message' => 'Bạn đã tham gia khóa học này từ trước.',
+                'course' => $course->load('lecturer:id,name,email'),
+            ]);
+        }
+
+        $course->students()->attach($user->id);
+
+        return response()->json([
+            'message' => 'Tham gia khóa học thành công!',
+            'course' => $course->load('lecturer:id,name,email'),
+        ]);
+    }
+
+    public function regenerateEnrollmentCode(Request $request, Course $course): JsonResponse
+    {
+        $this->ensureOwner($request, $course);
+        $newCode = 'FLTS-' . strtoupper(Str::random(6));
+        $course->update(['enrollment_code' => $newCode]);
+
+        return response()->json([
+            'message' => 'Đã tạo mã ghi danh mới.',
+            'enrollment_code' => $newCode,
+        ]);
+    }
+
+    public function toggleEnrollment(Request $request, Course $course): JsonResponse
+    {
+        $this->ensureOwner($request, $course);
+        $isOpen = !$course->is_enrollment_open;
+        $course->update(['is_enrollment_open' => $isOpen]);
+
+        return response()->json([
+            'message' => $isOpen ? 'Đã mở ghi danh khóa học.' : 'Đã khóa ghi danh khóa học.',
+            'is_enrollment_open' => $isOpen,
+        ]);
     }
 
     public function destroy(Request $request, Course $course, RagService $rag): JsonResponse

@@ -1193,3 +1193,30 @@ This records implementation and local runtime evidence on branch `feature/sprint
   - Frontend production build: Vite build successful (67 modules).
   - ChromaDB vector count: **551 vectors intact**.
   - All 8 Compose containers running and healthy. Live API end-to-end verified with real database records.
+
+## 35. Course Join Code and Math Formulas Normalization (KaTeX) — 2026-10-06
+
+- **Branch:** `feature/sprint3-ux-enrollment-progress`.
+- **Course Join Code (Self-Enrollment):**
+  - Added migration `2026_10_06_000022_add_enrollment_code_to_courses_table.php` (`enrollment_code` string 16 unique, `is_enrollment_open` boolean default true).
+  - `Course` model automatically assigns a unique `FLTS-XXXXXX` code and open status upon creation.
+  - Endpoints:
+    - `POST /api/courses/join`: Students self-enroll via join code. Enforces active student role, validates code, rejects when enrollment is closed, and acts idempotently if already enrolled.
+    - `POST /api/courses/{course}/enrollment-code/regenerate`: Lecturers regenerate code with instant invalidation of the old code while keeping existing enrollments intact.
+    - `PATCH /api/courses/{course}/enrollment-code/toggle`: Lecturers toggle open/closed enrollment.
+  - UI additions:
+    - `StudentDashboardView.vue`: Header button and modal to join by code.
+    - `CourseDetailView.vue` (Tab Sinh viên): Dedicated Enrollment Code Card with monospace code display, open/closed status badge, clipboard copy button, regenerate modal, and toggle button.
+- **Math Formula & Legacy Symbol Normalization (KaTeX):**
+  - Fixed Word/MathType Symbol font decoding artifacts (`0xC8` $\rightarrow$ `È` $\rightarrow$ `∪`, `0xC7` $\rightarrow$ `Ç` $\rightarrow$ `∩`, `Î` $\rightarrow$ `∈`, `Ï` $\rightarrow$ `∉`, `Ì` $\rightarrow$ `⊂`, `Í` $\rightarrow$ `⊆`).
+  - Three-tier implementation:
+    1. AI pipeline clean text in `rag_pipeline.py` normalizes legacy symbol encodings prior to chunking and embedding.
+    2. Universal English concise prompt in `main.py` instructs Gemini to format math formulas in `$ ... $` / `$$ ... $$` across all disciplines.
+    3. Frontend KaTeX rendering component `MathText.vue` installed with `katex` package, integrated in `QuizAttemptView.vue` and `QuizEditorView.vue`.
+- **Runtime Verification:**
+  - PHPUnit test suite: **34 tests / 212 assertions PASSED (100%)**.
+  - FastAPI Pytest: **21 tests PASSED (100%)**.
+  - ChromaDB vector count: **551 vectors intact**.
+  - Frontend production build: **73 modules transformed, 0 errors**.
+  - Live API testing: Verified student join, duplicate join rejection, lecturer code regeneration, and enrollment open/close toggles.
+

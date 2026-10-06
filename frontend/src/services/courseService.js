@@ -13,4 +13,10 @@ export const courseService = {
     apiRequest(`/courses/${courseId}/enrollments`, { method: 'POST', body: JSON.stringify({ student_id: studentId }) }),
   unenrollStudent: (courseId, studentId) =>
     apiRequest(`/courses/${courseId}/enrollments/${studentId}`, { method: 'DELETE' }),
+  joinCourse: (code) =>
+    apiRequest('/courses/join', { method: 'POST', body: JSON.stringify({ code }) }),
+  regenerateEnrollmentCode: (courseId) =>
+    apiRequest(`/courses/${courseId}/enrollment-code/regenerate`, { method: 'POST' }),
+  toggleEnrollment: (courseId) =>
+    apiRequest(`/courses/${courseId}/enrollment-code/toggle`, { method: 'PATCH' }),
 }

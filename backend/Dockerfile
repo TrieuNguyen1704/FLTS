@@ -14,7 +14,8 @@ WORKDIR /var/www/html
 COPY --from=dependencies /app/vendor ./vendor
 COPY . .
 RUN mkdir -p storage/app/documents storage/framework/cache storage/framework/sessions storage/framework/views storage/logs bootstrap/cache \
-    && chmod -R 775 storage bootstrap/cache
+    && chmod -R 775 storage bootstrap/cache \
+    && composer dump-autoload --optimize
 EXPOSE 8000
 # Demo startup is self-contained: migrations and idempotent seed data run before the API accepts requests.
-CMD ["sh", "-c", "php artisan migrate --force && php artisan db:seed --force && php artisan serve --host=0.0.0.0 --port=8000"]
+CMD ["sh", "-c", "php artisan migrate --force && php artisan db:seed --force --class='Database\\Seeders\\DatabaseSeeder' && php artisan serve --host=0.0.0.0 --port=8000"]

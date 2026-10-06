@@ -3,6 +3,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppState from '../components/AppState.vue'
 import BaseButton from '../components/BaseButton.vue'
+import MathText from '../components/MathText.vue'
 import { learningObjectService } from '../services/learningObjectService'
 
 const route = useRoute()
@@ -70,9 +71,16 @@ onMounted(load)
     <section v-if="!attempt" class="learning-panel"><h2>Sẵn sàng làm bài?</h2><p class="muted">Bạn có thể làm lại nhiều lần. Đáp án và giải thích chỉ hiển thị sau khi nộp bài.</p><BaseButton :loading="working" @click="start">Bắt đầu lượt làm mới</BaseButton></section>
     <form v-else class="quiz-attempt" @submit.prevent="submit">
       <article v-for="(question, questionIndex) in quiz.questions" :key="question.id" class="question-card" :class="{ 'question-card--correct': feedbackFor(question.id)?.is_correct, 'question-card--incorrect': result && !feedbackFor(question.id)?.is_correct }">
-        <header><strong>Câu {{ questionIndex + 1 }}</strong><span v-if="result">{{ feedbackFor(question.id)?.is_correct ? 'Đúng' : 'Chưa đúng' }}</span></header><h3>{{ question.question_text }}</h3>
-        <label v-for="option in question.options" :key="option.id" class="quiz-option"><input v-model="answers[question.id]" type="radio" :name="`question-${question.id}`" :value="option.id" :disabled="Boolean(result)" /><span>{{ option.option_text }} <strong v-if="result && feedbackFor(question.id)?.correct_option_id === option.id" class="correct-answer-label">(Đáp án đúng)</strong></span></label>
-        <div v-if="result" class="quiz-feedback"><p><strong>Giải thích:</strong> {{ feedbackFor(question.id)?.explanation }}</p><ul class="citation-list"><li v-for="citation in feedbackFor(question.id)?.citations || []" :key="citation.vector_id">{{ citation.document_name || 'Tài liệu nguồn' }} · {{ citation.source_locator || citation.vector_id }}</li></ul></div>
+        <header><strong>Câu {{ questionIndex + 1 }}</strong><span v-if="result">{{ feedbackFor(question.id)?.is_correct ? 'Đúng' : 'Chưa đúng' }}</span></header>
+        <h3><MathText :text="question.question_text" /></h3>
+        <label v-for="option in question.options" :key="option.id" class="quiz-option">
+          <input v-model="answers[question.id]" type="radio" :name="`question-${question.id}`" :value="option.id" :disabled="Boolean(result)" />
+          <span><MathText :text="option.option_text" /> <strong v-if="result && feedbackFor(question.id)?.correct_option_id === option.id" class="correct-answer-label">(Đáp án đúng)</strong></span>
+        </label>
+        <div v-if="result" class="quiz-feedback">
+          <p><strong>Giải thích:</strong> <MathText :text="feedbackFor(question.id)?.explanation" /></p>
+          <ul class="citation-list"><li v-for="citation in feedbackFor(question.id)?.citations || []" :key="citation.vector_id">{{ citation.document_name || 'Tài liệu nguồn' }} · {{ citation.source_locator || citation.vector_id }}</li></ul>
+        </div>
       </article>
       <p v-if="error" class="form-error">{{ error }}</p>
       <BaseButton v-if="!result" type="submit" :loading="working">Nộp bài và xem kết quả</BaseButton>

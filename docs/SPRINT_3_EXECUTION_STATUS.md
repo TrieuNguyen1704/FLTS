@@ -25,6 +25,8 @@ Tài liệu này ghi nhận toàn bộ mã nguồn, cấu hình, kiểm thử t�
 | PB36 / US-28 | Start/submit/score; không lộ đáp án trước submit; feedback đúng/sai, đáp án đúng, explanation và citation; lưu mọi retake, latest/best | Chấm điểm độc lập; bảo lưu lịch sử làm bài; PHPUnit kiểm tra option chéo bị từ chối | Đã xác minh local |
 | **PB UX / Task Center** | Background Task Center toàn cục trên topbar: theo dõi Document Processing và Quiz Generation; polling tập trung (3.5s active / 15s idle), tạm dừng khi tab ẩn và refresh tức thì khi tab hiện; đúng 1 toast thông báo khi xong/lỗi; thanh tiến trình indeterminate kèm tên stage thật; nút thử lại an toàn. | `BackgroundTaskController@index`, store `backgroundTasks.js`, component `BackgroundTaskCenter.vue` | Đã xác minh local & live test |
 | **PB Enrollment** | Quản lý sinh viên khóa học: liệt kê sinh viên đã ghi danh (kèm số lượt làm quiz), tìm kiếm sinh viên khả dụng (chỉ sinh viên active chưa thuộc khóa), ghi danh có xác thực trạng thái, hủy ghi danh bảo lưu toàn vẹn lịch sử bài thi. | `CourseController` (`students`, `availableStudents`, `enroll`, `unenroll`), Tab "Sinh viên" trong `CourseDetailView.vue` | Đã xác minh local & live test |
+| **PB Join Code** | Mã ghi danh khóa học (Course Join Code): Sinh viên tự ghi danh qua mã `FLTS-XXXXXX` thay vì thêm thủ công; Giảng viên xem mã, sao chép 1 chạm, đổi mã mới, đóng/mở nhận sinh viên. | Migration `000022`, `CourseController` (`join`, `regenerateEnrollmentCode`, `toggleEnrollment`), Modal tại `StudentDashboardView.vue`, Thẻ mã tại `CourseDetailView.vue` | Đã xác minh local & live test |
+| **PB Math & Formulas** | Chuẩn hóa ký hiệu toán học & render công thức: Khắc phục triệt để lỗi font Symbol (`È` thành `∪`, `Ç` thành `∩`, `Î` thành `∈`,...), tối ưu prompt AI ngắn gọn đa ngành (English), tích hợp KaTeX hiển thị công thức đẹp mắt trên giao diện làm bài và chỉnh sửa Quiz. | `rag_pipeline.py` clean_text, `main.py` prompt, `MathText.vue`, `QuizAttemptView.vue`, `QuizEditorView.vue` | Đã xác minh local & live test |
 
 ---
 
@@ -84,9 +86,9 @@ Tài liệu này ghi nhận toàn bộ mã nguồn, cấu hình, kiểm thử t�
 
 | Hạng mục kiểm tra | Lệnh thực hiện | Kết quả thực tế |
 |---|---|---|
-| **PHPUnit Test Suite** | `docker compose exec -T api php vendor/bin/phpunit --testdox` | **33 tests, 195 assertions PASSED (100%)** |
-| **FastAPI Pytest** | `docker compose exec -T ai pytest -q` | **20 passed (100%)** |
-| **Frontend Production Build** | `docker compose build web` | **Vite build thành công (67 modules, 0 error)** |
+| **PHPUnit Test Suite** | `docker compose exec -T api php vendor/bin/phpunit` | **34 tests, 212 assertions PASSED (100%)** |
+| **FastAPI Pytest** | `docker compose exec -T ai pytest -q` | **21 passed (100%)** |
+| **Frontend Production Build** | `docker compose build web` | **Vite build thành công (73 modules, 0 error)** |
 | **ChromaDB Vector Count** | Query collection `flts_document_chunks` | **551 vectors nguyên vẹn** |
 | **Docker Compose Services** | `docker compose ps` | **8 containers Up & Healthy** |
 | **Live API: Background Tasks** | `GET /api/background-tasks` | Trả về 16 tác vụ thực tế (Document & Quiz runs) |

@@ -64,7 +64,9 @@ const enrollingId = ref(null)
 const studentToUnenroll = ref(null)
 const unenrolling = ref(false)
 const studentFilter = ref('')
-
+const regeneratingCode = ref(false)
+const togglingEnrollment = ref(false)
+const showRegenerateConfirm = ref(false)
 async function loadCourse() {
   loading.value = true
   error.value = ''
@@ -247,6 +249,43 @@ async function confirmUnenroll() {
     toast.show(err.message || 'Không thể hủy ghi danh sinh viên.', 'error')
   } finally {
     unenrolling.value = false
+  }
+}
+
+async function copyEnrollmentCode() {
+  if (!course.value?.enrollment_code) return
+  try {
+    await navigator.clipboard.writeText(course.value.enrollment_code)
+    toast.show('Đã sao chép mã ghi danh vào bộ nhớ tạm.')
+  } catch {
+    toast.show('Không thể sao chép mã vào bộ nhớ tạm.', 'error')
+  }
+}
+
+async function confirmRegenerateCode() {
+  regeneratingCode.value = true
+  try {
+    const res = await courseService.regenerateEnrollmentCode(course.value.id)
+    course.value.enrollment_code = res.enrollment_code
+    showRegenerateConfirm.value = false
+    toast.show('Đã đổi mã ghi danh mới thành công.')
+  } catch (err) {
+    toast.show(err.message || 'Không thể đổi mã ghi danh.', 'error')
+  } finally {
+    regeneratingCode.value = false
+  }
+}
+
+async function handleToggleEnrollment() {
+  togglingEnrollment.value = true
+  try {
+    const res = await courseService.toggleEnrollment(course.value.id)
+    course.value.is_enrollment_open = res.is_enrollment_open
+    toast.show(res.message || 'Đã cập nhật trạng thái ghi danh.')
+  } catch (err) {
+    toast.show(err.message || 'Không thể cập nhật trạng thái ghi danh.', 'error')
+  } finally {
+    togglingEnrollment.value = false
   }
 }
 
@@ -512,12 +551,53 @@ onMounted(loadCourse)
 
     <!-- TAB 4: SINH VIÊN -->
     <section v-else-if="activeTab === 'students'" class="tab-pane">
+      <div class="enrollment-code-card">
+        <div class="enrollment-code-card__info">
+          <div class="enrollment-code-card__header">
+            <h3>Mã ghi danh khóa học</h3>
+            <span
+              class="status-chip"
+              :class="course.is_enrollment_open ? 'status-chip--active' : 'status-chip--inactive'"
+            >
+              {{ course.is_enrollment_open ? 'Đang mở ghi danh' : 'Đã đóng ghi danh' }}
+            </span>
+          </div>
+          <p class="enrollment-code-card__desc">
+            Chia sẻ mã này cho sinh viên để họ tự tham gia khóa học mà không cần phải thêm thủ công từng tài khoản.
+          </p>
+          <div class="enrollment-code-display">
+            <span class="code-value">{{ course.enrollment_code || '—' }}</span>
+            <BaseButton
+              variant="secondary"
+              @click="copyEnrollmentCode"
+            >
+              Sao chép mã
+            </BaseButton>
+          </div>
+        </div>
+        <div class="enrollment-code-card__actions">
+          <BaseButton
+            variant="secondary"
+            :loading="togglingEnrollment"
+            @click="handleToggleEnrollment"
+          >
+            {{ course.is_enrollment_open ? 'Tạm đóng ghi danh' : 'Mở lại ghi danh' }}
+          </BaseButton>
+          <BaseButton
+            variant="danger-ghost"
+            @click="showRegenerateConfirm = true"
+          >
+            Đổi mã mới
+          </BaseButton>
+        </div>
+      </div>
+
       <header class="section-header">
         <div>
           <h2>Quản lý sinh viên ghi danh</h2>
           <p>Danh sách sinh viên có quyền truy cập khóa học và làm bài kiểm tra trắc nghiệm.</p>
         </div>
-        <BaseButton @click="openEnrollModal">+ Ghi danh sinh viên</BaseButton>
+        <BaseButton @click="openEnrollModal">+ Ghi danh thủ công</BaseButton>
       </header>
 
       <div class="toolbar">
@@ -681,6 +761,23 @@ onMounted(loadCourse)
     </p>
     <p class="modal-notice">
       Lưu ý: Toàn bộ lịch sử làm bài kiểm tra và điểm số của sinh viên này trong khóa học vẫn được bảo lưu an toàn trong hệ thống.
+    </p>
+  </AppModal>
+
+  <!-- MODAL: XÁC NHẬN ĐỔI MÃ GHI DANH -->
+  <AppModal
+    v-model="showRegenerateConfirm"
+    title="Xác nhận đổi mã ghi danh mới"
+    confirm-label="Đổi mã mới"
+    :danger="true"
+    :loading="regeneratingCode"
+    @confirm="confirmRegenerateCode"
+  >
+    <p>
+      Bạn có chắc chắn muốn tạo mã ghi danh mới cho khóa học <strong>{{ course?.name }}</strong>?
+    </p>
+    <p class="modal-notice">
+      Lưu ý: Mã ghi danh cũ (<code>{{ course?.enrollment_code }}</code>) sẽ hết hiệu lực ngay lập tức. Những sinh viên đã ghi danh trước đó vẫn được giữ nguyên quyền truy cập khóa học bình thường.
     </p>
   </AppModal>
 </template>
@@ -947,6 +1044,79 @@ onMounted(loadCourse)
   border-radius: 4px;
   border-left: 3px solid #2958d8;
   margin-top: 8px;
+}
+
+/* Enrollment Code Card */
+.enrollment-code-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 18px 24px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.enrollment-code-card__info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-width: 280px;
+}
+
+.enrollment-code-card__header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.enrollment-code-card__header h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  color: #0f172a;
+}
+
+.enrollment-code-card__desc {
+  margin: 0;
+  font-size: 0.86rem;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+.enrollment-code-display {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.code-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #1e40af;
+  background: #ffffff;
+  padding: 4px 14px;
+  border: 1px dashed #3b82f6;
+  border-radius: 6px;
+  user-select: all;
+}
+
+.enrollment-code-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.status-chip--inactive {
+  background: #f1f5f9;
+  color: #64748b;
 }
 
 @media (max-width: 768px) {

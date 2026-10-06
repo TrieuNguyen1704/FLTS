@@ -31,6 +31,9 @@ Route::middleware('auth.token')->group(function () {
     Route::get('/courses/{course}/students/available', [CourseController::class, 'availableStudents'])->middleware('role:lecturer');
     Route::post('/courses/{course}/enrollments', [CourseController::class, 'enroll'])->middleware('role:lecturer');
     Route::delete('/courses/{course}/enrollments/{student}', [CourseController::class, 'unenroll'])->middleware('role:lecturer');
+    Route::post('/courses/join', [CourseController::class, 'join'])->middleware('role:student');
+    Route::post('/courses/{course}/enrollment-code/regenerate', [CourseController::class, 'regenerateEnrollmentCode'])->middleware('role:lecturer');
+    Route::patch('/courses/{course}/enrollment-code/toggle', [CourseController::class, 'toggleEnrollment'])->middleware('role:lecturer');
     Route::get('/background-tasks', [BackgroundTaskController::class, 'index'])->middleware('role:lecturer');
     // Documents remain lecturer-only in Sprint 1; student delivery is not implemented yet.
     Route::get('/courses/{course}/documents', [DocumentController::class, 'index'])->middleware('role:lecturer');

@@ -33,6 +33,12 @@ def test_clean_text_redacts_email_addresses_from_retrieval_context() -> None:
     assert clean_text('Liên hệ lecturer@flts.test để biết thêm.') == 'Liên hệ [redacted-email] để biết thêm.'
 
 
+def test_clean_text_normalizes_legacy_symbol_font_encodings() -> None:
+    raw = '|A È B| = |A| + |B| - |A Ç B| với x Î A và y Ï B và A Ì B và C Í D'
+    assert clean_text(raw) == '|A ∪ B| = |A| + |B| - |A ∩ B| với x ∈ A và y ∉ B và A ⊂ B và C ⊆ D'
+    assert clean_text('|AÈB|') == '|A ∪ B|'
+
+
 def test_chunk_text_is_deterministic_and_keeps_overlap() -> None:
     text = '\n\n'.join([' '.join(f'word{index}_{item}' for item in range(90)) for index in range(4)])
     chunks = chunk_text(text, target_words=120, overlap_words=10)
