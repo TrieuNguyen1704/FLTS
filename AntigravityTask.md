@@ -223,3 +223,58 @@ Khi **Codex** tiếp nhận công việc, hãy chú ý các định hướng ti�
 - UI được tinh gọn theo hướng sản phẩm: bỏ icon trang trí, banner/slogan kỹ thuật, workbench RAG khỏi Course Detail, giảm radius/shadow/card lồng nhau; nút và nội dung dùng tiếng Việt theo tác vụ.
 - Evidence: 8 services running; migration 21 ran; PHPUnit 29/167; Pytest 20; Vite production build pass. Smoke test Course 5 tạo Learning Object #2: HTTP `202` sau 135 ms, worker chạy 16 giây và hoàn thành 3 câu/version 1. Volumes không bị reset.
 - Nhánh vẫn là `feature/sprint3-quiz-learning-objects`; cần commit/push, mở PR và chờ CI/review. Không push trực tiếp `main`.
+
+## 13. Antigravity Sprint 3 UX, Background Task Center & Student Enrollment completion — 06/10/2026
+
+- **Nhánh triển khai:** `feature/sprint3-ux-enrollment-progress` tạo từ commit `4892115`.
+- **Background Task Center (Toàn cục & Bất đồng bộ):**
+  - Endpoint `GET /api/background-tasks`: Tổng hợp toàn bộ tác vụ nền (Document Processing Runs & Quiz Generation Runs) của các khóa học thuộc Lecturer.
+  - Trả về cấu trúc chuẩn: `id`, `type`, `course_id`, `course_name`, `course_code`, `title`, `status`, `stage`, `stage_label`, `started_at`, `finished_at`, `error_message`, `retryable`, `target_url`, `is_active`.
+  - Store `backgroundTasks.js`: Polling tập trung 3.5s khi bận, 15s khi nhàn rỗi; tự động dừng khi tab ẩn (`document.visibilityState === 'hidden'`) và refresh tức thì khi tab hiển thị lại; thông báo toast chính xác 1 lần khi task xong hoặc lỗi (không spam).
+  - Component `BackgroundTaskCenter.vue` tích hợp tại `AppTopbar.vue`: Icon và badge số lượng task đang chạy, ngăn kéo slide-over hiển thị chi tiết, thanh tiến trình indeterminate kèm tên stage backend (không giả lập phần trăm), nút thử lại và điều hướng nhanh.
+- **Quản lý sinh viên (Student Enrollment Management):**
+  - Endpoints backend trong `CourseController`:
+    - `GET /api/courses/{course}/students`: Danh sách sinh viên đã ghi danh kèm số lượt làm bài Quiz (`attempts_count`).
+    - `GET /api/courses/{course}/students/available`: Tìm kiếm sinh viên khả dụng (`role = 'student'`, `account_status = 'active'`, chưa ghi danh vào khóa).
+    - `POST /api/courses/{course}/enrollments`: Ghi danh sinh viên, kiểm tra bắt buộc tài khoản đang active.
+    - `DELETE /api/courses/{course}/enrollments/{student}`: Hủy ghi danh, bảo lưu toàn bộ lịch sử điểm số và bài thi (`quiz_attempts`) trong CSDL.
+  - Phân quyền (RBAC): Chỉ Giảng viên sở hữu khóa học mới có quyền truy cập và thao tác (chặn 403 cho người dùng khác).
+- **Tái thiết kế giao diện (UI Redesign):**
+  - `CourseDetailView.vue` cấu trúc lại thành 4 tab: "Tổng quan", "Tài liệu", "Quiz trắc nghiệm", "Sinh viên", đồng bộ URL query `?tab=...`.
+  - Bổ sung modal tìm kiếm và ghi danh sinh viên, modal xác nhận hủy ghi danh an toàn.
+  - Cập nhật số liệu thống kê bài Quiz chính xác trên `LecturerDashboardView.vue`.
+  - Loại bỏ hoàn toàn slogan quảng cáo và icon trang trí không cần thiết, đạt chuẩn giáo dục chuyên nghiệp.
+- **Kết quả kiểm chứng:**
+  - PHPUnit test suite: **33 tests, 195 assertions PASSED (100%)** bao gồm test suite mới `SprintThreeEnrollmentAndTasksTest`.
+  - FastAPI Pytest: **20 tests PASSED (100%)**.
+  - Production build web: **Vite build thành công (67 modules, 0 errors)**.
+  - ChromaDB: **551 vectors nguyên vẹn**.
+  - Docker Compose: Toàn bộ 8 services hoạt động bình thường, healthy.
+  - Kiểm thử Live API: Endpoint background-tasks, danh sách sinh viên, ghi danh và hủy ghi danh hoạt động chính xác với HTTP 200.
+
+## 14. Antigravity Course Join Code & Math Formulas Normalization (KaTeX) completion — 06/10/2026
+
+- **Nhánh triển khai:** `feature/sprint3-ux-enrollment-progress`
+- **Mã ghi danh khóa học (Course Join Code):**
+  - Migration `2026_10_06_000022_add_enrollment_code_to_courses_table.php` bổ sung `enrollment_code` (string 16, unique) và `is_enrollment_open` (boolean, default true). Tự động tạo mã `FLTS-XXXXXX` cho các khóa học hiện có.
+  - `Course.php`: Tự động gán mã ghi danh và trạng thái mở khi tạo khóa học qua booted hook `creating`.
+  - Backend Endpoints trong `CourseController`:
+    - `POST /api/courses/join`: Cho phép sinh viên (`role = 'student'`, `active`) tự tham gia khóa học qua mã; kiểm tra trạng thái mở/đóng và xử lý idempotent nếu đã ghi danh từ trước.
+    - `POST /api/courses/{course}/enrollment-code/regenerate`: Giảng viên tạo mã mới khi mã cũ bị lộ; mã cũ mất hiệu lực ngay, sinh viên đã ghi danh không bị ảnh hưởng.
+    - `PATCH /api/courses/{course}/enrollment-code/toggle`: Giảng viên tạm dừng hoặc mở lại việc nhận sinh viên mới.
+  - Giao diện người dùng:
+    - `StudentDashboardView.vue`: Nút "+ Tham gia bằng mã" trên tiêu đề và modal nhập mã `FLTS-XXXXXX`.
+    - `CourseDetailView.vue` Tab Sinh viên: Thẻ thông tin mã ghi danh nổi bật (phông chữ monospace lớn), huy hiệu trạng thái mở/đóng, nút sao chép vào clipboard, nút đổi mã mới kèm modal xác nhận an toàn, và nút chuyển đổi đóng/mở ghi danh.
+- **Khắc phục lỗi ký hiệu toán học & Tích hợp KaTeX:**
+  - Khắc phục triệt để lỗi mã hóa ký tự font Symbol legacy từ tệp Word/PDF xuất sang (`0xC8` $\rightarrow$ `È` $\rightarrow$ `∪`, `0xC7` $\rightarrow$ `Ç` $\rightarrow$ `∩`, `Î` $\rightarrow$ `∈`, `Ï` $\rightarrow$ `∉`, `Ì` $\rightarrow$ `⊂`, `Í` $\rightarrow$ `⊆`).
+  - Giải pháp 3 tầng:
+    1. **Tầng tiền xử lý văn bản AI (`rag_pipeline.py`):** Regex chuẩn hóa các ký hiệu toán học trong `clean_text` trước khi chunking và vector embedding.
+    2. **Tầng Prompt AI (`main.py`):** Tối ưu hóa prompt bằng tiếng Anh ngắn gọn, phổ quát cho mọi lĩnh vực khoa học/kỹ thuật/kinh tế/xã hội, yêu cầu bao bọc công thức trong dấu `$ ... $`.
+    3. **Tầng hiển thị Frontend (`MathText.vue`):** Tự động chuẩn hóa ký tự lỗi thừa kế và biên dịch công thức LaTeX bằng thư viện KaTeX; tích hợp trong `QuizAttemptView.vue` (làm bài) và `QuizEditorView.vue` (xem trước khi biên soạn).
+- **Kết quả kiểm chứng và chất lượng:**
+  - PHPUnit: **34 tests, 212 assertions PASSED (100%)** với test tự động bổ sung `test_student_can_join_course_by_code_and_lecturer_can_manage_code`.
+  - AI Service Pytest: **21 tests PASSED (100%)** với test bổ sung `test_clean_text_normalizes_legacy_symbol_font_encodings`.
+  - Frontend Build: **73 modules transformed, 0 errors**.
+  - ChromaDB: **551 vectors nguyên vẹn 100%**.
+  - Docker Compose: Toàn bộ 8 services Up & Healthy.
+

@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import AppState from '../components/AppState.vue'
 import BaseButton from '../components/BaseButton.vue'
 import BaseInput from '../components/BaseInput.vue'
+import MathText from '../components/MathText.vue'
 import { learningObjectService } from '../services/learningObjectService'
 import { toast } from '../stores/toast'
 
@@ -96,9 +97,16 @@ onMounted(load)
       <article v-for="(question, questionIndex) in form.questions" :key="questionIndex" class="question-card">
         <header><strong>Câu {{ questionIndex + 1 }}</strong><span>{{ question.citations.length }} nguồn dẫn</span></header>
         <label class="field"><span class="field__label">Câu hỏi</span><textarea v-model="question.question_text" :disabled="object.status !== 'draft'" /></label>
-        <div class="option-editor"><label v-for="(_, optionIndex) in question.options" :key="optionIndex" class="field"><span class="field__label">Lựa chọn {{ String.fromCharCode(65 + optionIndex) }}</span><input v-model="question.options[optionIndex]" :disabled="object.status !== 'draft'" /></label></div>
+        <div v-if="question.question_text" class="math-preview"><small>Hiển thị thực tế:</small><MathText :text="question.question_text" /></div>
+        <div class="option-editor">
+          <div v-for="(_, optionIndex) in question.options" :key="optionIndex" class="option-field-wrap">
+            <label class="field"><span class="field__label">Lựa chọn {{ String.fromCharCode(65 + optionIndex) }}</span><input v-model="question.options[optionIndex]" :disabled="object.status !== 'draft'" /></label>
+            <div v-if="question.options[optionIndex]" class="option-preview"><MathText :text="question.options[optionIndex]" /></div>
+          </div>
+        </div>
         <label class="field"><span class="field__label">Đáp án đúng</span><select v-model.number="question.correct_index" :disabled="object.status !== 'draft'"><option v-for="(_, optionIndex) in question.options" :key="optionIndex" :value="optionIndex">Lựa chọn {{ String.fromCharCode(65 + optionIndex) }}</option></select></label>
         <label class="field"><span class="field__label">Giải thích</span><textarea v-model="question.explanation" :disabled="object.status !== 'draft'" /></label>
+        <div v-if="question.explanation" class="math-preview"><small>Hiển thị thực tế:</small><MathText :text="question.explanation" /></div>
         <ul class="citation-list"><li v-for="citation in question.citations" :key="citation.vector_id">{{ citation.document_name || 'Tài liệu nguồn' }} · {{ citation.source_locator || citation.vector_id }}</li></ul>
       </article>
       <p v-if="error" class="form-error">{{ error }}</p>
@@ -107,3 +115,39 @@ onMounted(load)
     <section class="content-section"><header class="section-header"><div><h2>Lịch sử phiên bản</h2><p>Mỗi lần lưu chỉnh sửa sẽ tạo một phiên bản mới.</p></div></header><div class="version-list"><span v-for="version in object.versions" :key="version.id" class="count-chip">Phiên bản {{ version.version_number }}</span></div></section>
   </template>
 </template>
+
+<style scoped>
+.math-preview {
+  margin-top: 4px;
+  margin-bottom: 8px;
+  padding: 6px 12px;
+  background: #f8fafc;
+  border-left: 3px solid #3b82f6;
+  border-radius: 4px;
+  font-size: 0.92rem;
+  color: #1e293b;
+}
+
+.math-preview small {
+  display: block;
+  font-size: 0.74rem;
+  color: #64748b;
+  margin-bottom: 2px;
+  font-weight: 500;
+}
+
+.option-field-wrap {
+  display: flex;
+  flex-direction: column;
+}
+
+.option-preview {
+  margin-top: 2px;
+  margin-bottom: 6px;
+  padding: 4px 10px;
+  background: #f1f5f9;
+  border-radius: 4px;
+  font-size: 0.88rem;
+  color: #334155;
+}
+</style>

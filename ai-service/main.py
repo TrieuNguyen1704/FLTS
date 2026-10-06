@@ -364,11 +364,14 @@ def generate_quiz(request: QuizGenerationRequest) -> dict[str, Any]:
         raise PipelineError('NO_GROUNDED_CONTEXT', 'No processed chunks matched this quiz topic.', 'generation', 422)
     context = '\n\n'.join(f'[Source {index}] {match["content"]}' for index, match in enumerate(matches, start=1))
     instruction = (
-        'Create a Vietnamese single-choice quiz using only the numbered source chunks below. '
-        f'Generate exactly {request.question_count} questions at {request.difficulty} difficulty about: {request.topic}. '
-        'Each question must have exactly four distinct options, one correct_index, a source-grounded explanation, '
-        'and one or more citation_indexes containing only supplied Source numbers. Do not use outside knowledge. '
-        f'\n\nSource chunks:\n{context}'
+        'Create a Vietnamese single-choice educational quiz using only the numbered source chunks below.\n'
+        f'- Topic: {request.topic}\n'
+        f'- Question count: {request.question_count} | Difficulty: {request.difficulty}\n\n'
+        'REQUIREMENTS:\n'
+        '1. Grounding: Rely strictly on the provided source chunks. Each question must include valid citation_indexes referencing the supporting [Source] numbers.\n'
+        '2. Natural Presentation & Normalization: Write clear, unambiguous Vietnamese. Automatically normalize discipline-specific notation, formulas (wrap math/science expressions in $...$), and legacy font/encoding artifacts from source text.\n'
+        '3. Strict Structure: Each question must have exactly four distinct options, one zero-based correct_index (0-3), and an evidence-backed explanation.\n\n'
+        f'Source chunks:\n{context}'
     )
     try:
         client = gemini_client()

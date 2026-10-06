@@ -7,6 +7,7 @@ import BaseInput from '../components/BaseInput.vue'
 import { courseService } from '../services/courseService'
 import { documentService } from '../services/documentService'
 import { learningObjectService } from '../services/learningObjectService'
+import { backgroundTasks } from '../stores/backgroundTasks'
 import { toast } from '../stores/toast'
 
 const route = useRoute()
@@ -98,6 +99,7 @@ async function generateQuiz() {
     activeObjectId.value = result.learning_object.id
     objects.value.unshift(result.learning_object)
     toast.show('Yêu cầu tạo Quiz đã được tiếp nhận. Bạn có thể tiếp tục làm việc trong khi hệ thống xử lý.')
+    backgroundTasks.fetchTasks()
     await pollPending()
   } catch (requestError) {
     error.value = requestError.message || 'Không thể gửi yêu cầu tạo Quiz lúc này.'
@@ -114,6 +116,7 @@ async function retryGeneration(object) {
     if (index !== -1) objects.value[index] = result.learning_object
     activeObjectId.value = object.id
     toast.show('Yêu cầu tạo lại Quiz đã được đưa vào hàng đợi.')
+    backgroundTasks.fetchTasks()
   } catch (requestError) {
     toast.show(requestError.message || 'Không thể tạo lại Quiz.', 'error')
   } finally {
