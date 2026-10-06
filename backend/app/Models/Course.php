@@ -25,4 +25,9 @@ class Course extends Model
     {
         return $this->hasMany(TeachingDocument::class);
     }
+
+    public function learningObjects(): HasMany
+    {
+        return $this->hasMany(LearningObject::class);
+    }
 }

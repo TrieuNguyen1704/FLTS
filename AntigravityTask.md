@@ -165,3 +165,61 @@ Khi **Codex** tiếp nhận công việc, hãy chú ý các định hướng ti�
 - Retrieval/context redact địa chỉ e-mail; page/paragraph/table locator còn đúng khi chunk overlap. Tương tác UI gặp quota Gemini trả 429 an toàn/thử lại thay vì chờ retry dài; Nginx có timeout RAG tương ứng.
 - Kiểm chứng sau recreate app services: 7 service Compose running (API/AI/MySQL/Chroma/Mailpit healthy); real internal Gemini evidence request thành công và trả 2 citations. FastAPI: **16 passed** (1 warning không chặn); Laravel: **16 tests / 83 assertions**.
 - Phần chưa đủ evidence vẫn giữ nguyên: DOCX fixture/run mới, real-document Chroma restart, cross-account/UI capture, corrupt/empty fixture matrix và PR/review/ceremony evidence.
+
+## 10. Sprint 3 Architectural Decisions & Master Execution Blueprint — 06/10/2026 (Antigravity)
+
+### A. Quyết định phạm vi & định mức công việc (Scope vs Capacity)
+* **Khung năng lực nhóm:** 128 giờ cho 4 thành viên.
+* **Quyết định cam kết Core Sprint 3 (Tổng estimate: 110 giờ):** Tập trung xây dựng trọn vẹn chu trình học tập tương tác trắc nghiệm (Quiz Learning Object Vertical Slice):
+  1. `PB24 / US-15` — Sinh câu hỏi Quiz tự động bằng RAG (22h)
+  2. `PB28 / US-19` — Kiểm định cấu trúc Schema JSON đầu ra (10h)
+  3. `PB29 / US-20` — Tùy biến tham số sinh câu hỏi: độ khó, số lượng, chủ đề (8h)
+  4. `PB30 / US-21` — Xem trước bộ câu hỏi Quiz (Preview) (12h)
+  5. `PB31 / US-22` — Giảng viên chỉnh sửa câu hỏi/đáp án/giải thích (Edit) (12h)
+  6. `PB33 / US-24` — Phê duyệt và Xuất bản học liệu (Approve & Publish) (14h)
+  7. `PB34 / US-25` — Quản lý trạng thái (`draft`, `published`, `archived`) & Lịch sử phiên bản (8h)
+  8. `PB35 / US-27` — Không gian học tập của Sinh viên (Student Course Workspace) (10h)
+  9. `PB36 / US-28` — Sinh viên làm bài, nộp bài, chấm điểm & xem giải thích (Quiz Interaction) (16h)
+* **Quyết định Stretch Goals:** `PB25 / US-16` (Flashcard Generation — 18h) và `PB32 / US-23` (Regeneration — 10h) được xếp vào Stretch Goals, chỉ triển khai khi chu trình Quiz hoàn thành và pass toàn bộ test/evidence.
+
+### B. Quyết định nghiệp vụ sư phạm (Pedagogical & Business Rules)
+1. **Làm lại bài Quiz (Retake Policy):** Sinh viên được phép làm bài nhiều lần (không giới hạn lượt làm mặc định). Hệ thống lưu lại toàn bộ các lần làm (`attempt_number`, điểm số, thời gian) trong bảng `quiz_attempts`, hiển thị điểm số lần mới nhất và điểm cao nhất.
+2. **Phản hồi tức thì & Minh bạch nguồn học liệu (Instant Feedback & Grounding):** Khi sinh viên nộp bài, hệ thống chấm điểm tự động ngay lập tức, hiển thị đáp án đúng/sai kèm lời giải thích trích dẫn chính xác từ tài liệu giáo trình (phục vụ phương pháp Lớp học đảo ngược - Flipped Learning).
+3. **Chống ảo giác (Anti-hallucination):** Toàn bộ câu hỏi Quiz chỉ được tạo từ các chunks RAG có thật của môn học. Gemini trả về `citation_indexes` và FastAPI map sang vector ID / metadata thật tương tự cơ chế đã kiểm chứng ở PR #8.
+
+### C. Thiết kế CSDL (Database Schema Design)
+* `learning_objects`: `id`, `course_id`, `type` (`quiz`, `flashcard`), `title`, `description`, `status` (`draft`, `published`, `archived`), `created_by`, `published_at`, `timestamps`.
+* `learning_object_versions`: `id`, `learning_object_id`, `version_number`, `content_payload` (JSON), `generation_params` (JSON), `created_by`, `timestamps`.
+* `quizzes`: `id`, `learning_object_id`, `time_limit_minutes`, `passing_score` (default 60), `total_questions`, `timestamps`.
+* `quiz_questions`: `id`, `quiz_id`, `question_index`, `question_text`, `question_type` (`single_choice`), `explanation`, `citations` (JSON), `timestamps`.
+* `quiz_options`: `id`, `quiz_question_id`, `option_index`, `option_text`, `is_correct` (boolean), `timestamps`.
+* `quiz_attempts`: `id`, `quiz_id`, `student_id`, `attempt_number`, `score` (0-100), `total_correct`, `started_at`, `submitted_at`, `status` (`in_progress`, `completed`), `timestamps`.
+* `quiz_attempt_answers`: `id`, `quiz_attempt_id`, `quiz_question_id`, `selected_option_id`, `is_correct` (boolean), `timestamps`.
+
+### D. Contract FastAPI: `POST /internal/v1/generation/quiz`
+* **Input:** `course_id`, `topic`, `difficulty` (`easy`, `medium`, `hard`), `question_count` (3–20), `document_ids` (tùy chọn), `top_k`.
+* **Output:** JSON tuân thủ Pydantic schema với `questions`: `[ { question, options: [str], correct_index: int, explanation: str, citation_indexes: [int] } ]`.
+* **Chống rò rỉ:** Header `Authorization: Bearer <AI_SERVICE_TOKEN>`. Sinh bằng `gemini-2.5-flash` qua `response_schema`.
+
+### E. Quy tắc an toàn Git & Triển khai
+* Tạo nhánh mới từ `main` mới nhất: `feature/sprint3-quiz-learning-objects`.
+* Tuyệt đối không push trực tiếp vào `main`. Mọi thay đổi phải đi qua Pull Request.
+* Tuyệt đối không xóa volumes Docker, dữ liệu MySQL hoặc ChromaDB hiện có.
+
+## 11. Codex Sprint 3 implementation handoff — 06/10/2026
+
+- Nhánh `feature/sprint3-quiz-learning-objects` đã triển khai 9 PB core của Quiz vertical slice; không triển khai PB25 Flashcards hoặc PB32 Regenerate.
+- FastAPI có `/internal/v1/generation/quiz`, Pydantic structured schema và server-side citation mapping. Laravel có 7 migration/model, ownership/enrollment RBAC, draft edit/version, publish/archive và Student attempt/score/feedback/retake.
+- Vue có Lecturer generation/preview/editor và Student course/attempt views, đều gọi backend thật qua `learningObjectService`; không có mock learning-object data.
+- Kiểm chứng: PHPUnit 23 tests/136 assertions; Pytest 19 passed; 7 Compose services running; Chroma giữ 551 vectors; real Gemini tạo 3/3 câu grounded. Browser E2E tạo Learning Object #1 ở Course 4, lưu Version 2, publish, Student làm hai lượt 33.33 và 100.
+- Dữ liệu browser E2E được giữ lại để demo. Không reset volume. Tài liệu bằng chứng đầy đủ: `docs/SPRINT_3_EXECUTION_STATUS.md`.
+- Việc còn lại ngoài code local: push branch, PR, CI/review/merge; không tự điền Actual hours trong workbook. Các giới hạn còn lại gồm timer chưa cưỡng chế, chưa restore version, chưa Flashcards/Regenerate/analytics.
+
+## 12. Codex async generation, course deletion and UI handoff — 06/10/2026
+
+- Đã thay synchronous Quiz generation từng gây cURL timeout 600 giây bằng `learning_object_generation_runs` và `GenerateQuizLearningObject` trên queue riêng `generation`. API trả `202`; Vue poll 3 giây, hiển thị trạng thái/retry; UUID `request_id` làm request idempotent.
+- `ProcessTeachingDocument` chạy queue `documents`; Compose có `queue-worker` và `generation-worker`. FastAPI dùng `run_in_threadpool()` cho extraction/chunk/embed/Chroma write để health và request tương tác không bị khóa bởi retry document dài.
+- Đã thêm `DELETE /api/courses/{course}` và FastAPI `DELETE /internal/v1/courses/{course_id}/vectors`. Chỉ owner Lecturer được xóa, phải nhập chính xác course code; chặn task active; vector failure giữ nguyên course/file; foreign-key cascade xóa enrollment/document/learning object/Quiz/attempt.
+- UI được tinh gọn theo hướng sản phẩm: bỏ icon trang trí, banner/slogan kỹ thuật, workbench RAG khỏi Course Detail, giảm radius/shadow/card lồng nhau; nút và nội dung dùng tiếng Việt theo tác vụ.
+- Evidence: 8 services running; migration 21 ran; PHPUnit 29/167; Pytest 20; Vite production build pass. Smoke test Course 5 tạo Learning Object #2: HTTP `202` sau 135 ms, worker chạy 16 giây và hoàn thành 3 câu/version 1. Volumes không bị reset.
+- Nhánh vẫn là `feature/sprint3-quiz-learning-objects`; cần commit/push, mở PR và chờ CI/review. Không push trực tiếp `main`.

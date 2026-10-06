@@ -26,14 +26,9 @@ onMounted(loadCourses)
 <template>
   <section class="page-heading">
     <div>
-      <p class="eyebrow">KHÔNG GIAN HỌC TẬP</p>
       <h1>Khóa học của tôi</h1>
-      <p>Danh sách các khóa học bạn đã đăng ký hoặc được cấp quyền truy cập học tập.</p>
+      <p>Danh sách khóa học bạn được cấp quyền truy cập.</p>
     </div>
-  </section>
-  <section class="notice-banner">
-    <strong>Lưu ý học tập</strong>
-    <span>Sinh viên chỉ truy cập được các học liệu và tài liệu đã được Giảng viên phê duyệt và xuất bản chính thức.</span>
   </section>
   <section v-if="loading" class="course-grid">
     <div v-for="index in 2" :key="index" class="course-card skeleton" />
@@ -43,7 +38,7 @@ onMounted(loadCourses)
   </section>
   <section v-else-if="courses.length" class="course-grid">
     <CourseCard v-for="course in courses" :key="course.id" :course="course" compact>
-      <span class="course-card__access">Đã tham gia</span>
+      <RouterLink class="inline-link" :to="{ name: 'student-course', params: { courseId: course.id } }">Mở không gian học tập</RouterLink>
     </CourseCard>
   </section>
   <AppState

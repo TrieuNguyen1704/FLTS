@@ -1,6 +1,6 @@
-# FLTS Sprint 1 Demo
+# FLTS — Flipped Learning Teaching System
 
-Đây là nền tảng Sprint 1 đã được mở rộng bằng vertical slice Sprint 2 đang kiểm chứng, không phải MVP hoàn chỉnh. Luồng tài khoản/RBAC, course và upload metadata của Sprint 1 vẫn có; Sprint 2 bổ sung queue xử lý tài liệu, parser, ChromaDB và Gemini integration trong nhánh triển khai. Chỉ các bằng chứng ghi trong tài liệu Sprint 2 mới được dùng để báo cáo trạng thái RAG; Quiz và analytics vẫn chưa có.
+Repository hiện có các vertical slice đã kiểm chứng cho tài khoản/RBAC, khóa học, tài liệu, xử lý/truy xuất tài liệu và Quiz learning object. Đây chưa phải toàn bộ MVP; Flashcards, analytics và các mục được ghi là chưa triển khai không được xem là hoàn thành.
 
 Xem [hướng dẫn đọc toàn bộ codebase bằng tiếng Việt](docs/CODEBASE_GUIDE_VI.md) để phân biệt code framework/dependency với code Sprint 1, và để lần theo các luồng login, phân quyền, course và upload.
 
@@ -13,6 +13,16 @@ Sprint 2 is in implementation, not complete. The current branch adds a real Lara
 For the Lecturer's evidence-backed response, the AI receives only the current course's retrieved chunks and returns validated source indexes; the service maps those indexes back to authoritative Chroma vector metadata. If Gemini temporarily rate-limits an interactive query, the UI receives a retryable message rather than waiting through long background-style retries. E-mail addresses found in retrieved source text are redacted from the browser-facing RAG result.
 
 For the repeatable live-provider verification procedure and the record fields required at Sprint Review, use [the Sprint 2 E2E evidence runbook](docs/SPRINT_2_E2E_EVIDENCE.md).
+
+## Sprint 3 Quiz learning objects (06/10/2026)
+
+The current Sprint 3 branch adds the core Quiz learning-object vertical slice: grounded Quiz generation, strict structured-output validation, Lecturer preview/edit/version/publish, Student published-course workspace, attempts, scoring, immediate grounded feedback and retakes with latest/best scores. See [the verified Sprint 3 implementation status](docs/SPRINT_3_EXECUTION_STATUS.md).
+
+Lecturer flow: open a course with at least one processed document, select **Tạo và quản lý Quiz**, submit the generation request, continue working while the background worker runs, then review/edit and publish the completed draft. Student flow: open **Khóa học của tôi**, choose a course and published Quiz, submit answers, review explanations/citations and retake when needed.
+
+Quiz generation returns `202 Accepted` immediately and is processed by the dedicated `generation-worker`. The UI polls `queued → generating → completed/failed`, offers a safe retry after failure and never exposes internal cURL/provider diagnostics. Document ingestion remains on the separate `queue-worker` queue so a large embedding job cannot sit in front of an interactive Quiz job.
+
+PB25 Flashcards and PB32 Regenerate remain stretch goals and are not implemented. Time limits are stored as Quiz metadata but are not yet enforced by a countdown timer.
 
 After `Copy-Item .env.example .env`, edit the ignored `.env` and set a newly generated `GEMINI_API_KEY`; the key must never be committed. Also set a different high-entropy `AI_SERVICE_TOKEN` for this local stack. Without either value, containers still start, but internal RAG requests intentionally fail instead of using a predictable default or pretending they succeeded.
 
@@ -29,7 +39,7 @@ docker compose up --build -d
 docker compose ps
 ```
 
-Chờ trạng thái `api`, `ai`, `chroma`, `mysql`, `mailpit` là healthy và `queue-worker`, `web` là running, rồi mở `http://localhost:8080`. Mailpit chỉ dùng cho email reset mật khẩu khi demo local tại `http://localhost:8025`.
+Chờ trạng thái `api`, `ai`, `chroma`, `mysql`, `mailpit` là healthy và `queue-worker`, `generation-worker`, `web` là running, rồi mở `http://localhost:8080`. Mailpit chỉ dùng cho email reset mật khẩu khi chạy local tại `http://localhost:8025`.
 
 Tài khoản seed:
 
@@ -55,6 +65,7 @@ Khóa học `FLIP-101` đã được cấp quyền cho `student@flts.test`.
 Invoke-RestMethod http://localhost:8000/api/health
 Invoke-RestMethod http://localhost:8001/health
 docker compose exec api php vendor/bin/phpunit
+docker compose exec ai pytest -q
 ```
 
 Laravel API ở `http://localhost:8000/api`; giao diện Vue ở `http://localhost:8080`. Giao diện proxy `/api` vào Laravel nên không cần cấu hình CORS cho demo local.
@@ -79,6 +90,7 @@ Sau reset, chạy lại `docker compose up --build -d`; migration và seeder s�
 - Trạng thái `uploaded_pending_processing` nghĩa là tệp đã lưu nhưng **chưa** được trích xuất, chunk, embedding hoặc RAG xử lý.
 - Sprint 2 dùng Google Gemini (`gemini-embedding-2`, vector 768 chiều; `gemini-2.5-flash`) và ChromaDB local. Một `GEMINI_API_KEY` hợp lệ cùng `AI_SERVICE_TOKEN` riêng chỉ được đặt trong `.env` bị Git ignore. Không commit hoặc chia sẻ lại secret; nếu key từng được gửi qua chat, hãy rotate nó trong Google AI Studio.
 - API dùng bearer token có hiệu lực đến đăng xuất hoặc lần đăng nhập mới của cùng tài khoản. Đây là lựa chọn tối thiểu cho demo, không phải cơ chế production.
+- Xóa khóa học là thao tác vĩnh viễn, yêu cầu Lecturer sở hữu khóa học nhập đúng mã khóa học. Backend chặn xóa khi còn tác vụ đang chạy và chỉ xóa database/file sau khi dọn vector thành công.
 
 ## Cấu trúc
 

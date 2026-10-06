@@ -34,15 +34,10 @@ onMounted(loadDashboard)
 <template>
   <section class="page-heading">
     <div>
-      <p class="eyebrow">KHÔNG GIAN GIẢNG VIÊN</p>
-      <h1>Xin chào, chúc một ngày giảng dạy hiệu quả.</h1>
-      <p>Quản lý các khóa học và tài liệu nguồn phục vụ cho mô hình học tập đảo ngược (Flipped Learning).</p>
+      <h1>Tổng quan</h1>
+      <p>Theo dõi khóa học và tài liệu của bạn.</p>
     </div>
     <BaseButton @click="router.push({ name: 'course-management' })">Tạo khóa học</BaseButton>
-  </section>
-  <section class="notice-banner">
-    <strong>Thông báo hệ thống</strong>
-    <span>Tài liệu giảng dạy tải lên được lưu trữ an toàn và sẵn sàng cho các quy trình tạo lập học liệu thông minh.</span>
   </section>
   <section v-if="loading" class="summary-grid">
     <div v-for="index in 3" :key="index" class="summary-card skeleton" />
@@ -62,7 +57,7 @@ onMounted(loadDashboard)
       <article class="summary-card">
         <span class="summary-card__label">Học liệu sẵn sàng</span>
         <strong>{{ courses.length ? documentCount : 0 }}</strong>
-        <small>Học liệu trong hệ thống</small>
+        <small>Tài liệu trong khóa học</small>
       </article>
     </section>
     <section class="content-section">
@@ -71,12 +66,12 @@ onMounted(loadDashboard)
           <h2>Khóa học gần đây</h2>
           <p>Mở khóa học để quản lý học liệu và tài liệu nguồn.</p>
         </div>
-        <RouterLink :to="{ name: 'course-management' }">Xem tất cả khóa học →</RouterLink>
+        <RouterLink :to="{ name: 'course-management' }">Xem tất cả khóa học</RouterLink>
       </header>
       <div v-if="recentCourses.length" class="course-grid">
         <CourseCard v-for="course in recentCourses" :key="course.id" :course="course">
           <RouterLink class="inline-link" :to="{ name: 'course-detail', params: { id: course.id } }">
-            Mở khóa học →
+            Mở khóa học
           </RouterLink>
         </CourseCard>
       </div>

@@ -59,7 +59,7 @@ async function logout() {
   try {
     if (state.token) await authService.logout()
   } catch {
-    // The backend can already have invalidated this demo token after another login.
+    // The backend may already have invalidated a saved token after another login.
     // Local sign-out must still complete and return the user to the Login view.
   } finally {
     clear()

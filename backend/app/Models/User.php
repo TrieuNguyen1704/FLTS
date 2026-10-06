@@ -20,4 +20,14 @@ class User extends Model
     {
         return $this->hasMany(Course::class, 'lecturer_id');
     }
+
+    public function learningObjects(): HasMany
+    {
+        return $this->hasMany(LearningObject::class, 'created_by');
+    }
+
+    public function quizAttempts(): HasMany
+    {
+        return $this->hasMany(QuizAttempt::class, 'student_id');
+    }
 }

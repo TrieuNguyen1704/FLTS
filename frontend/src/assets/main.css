@@ -43,3 +43,59 @@ select:focus { border-color: #5578de; box-shadow: 0 0 0 3px #5175d31a; }
 .status-badge--processing { background: #e8f0ff; color: #3159c7; }.status-badge--processed { background: #e8f8ef; color: #237044; }.status-badge--failed { background: #fff0f2; color: #a42a43; }
 .rag-workbench { border-top: 1px solid #e1e6f0; padding-top: 30px; }.rag-results { display: grid; gap: 12px; }.rag-result-card, .evidence-card { border: 1px solid #e1e7f2; border-radius: 10px; padding: 15px; background: #fff; }.rag-result-card header { display: flex; justify-content: space-between; gap: 12px; color: #304061; font-size: .82rem; }.rag-result-card header span { color: #4e6bc2; font-size: .73rem; font-weight: 750; white-space: nowrap; }.rag-result-card small { color: #7a86a0; }.rag-result-card p, .evidence-card p { margin: 9px 0 0; color: #4b5874; font-size: .84rem; line-height: 1.6; white-space: pre-wrap; }.evidence-card { margin-top: 18px; border-color: #cfdcf8; background: #f9fbff; }.evidence-card ul { margin: 10px 0 0; padding-left: 20px; color: #536582; font-size: .78rem; }.form-error { margin: -10px 0 16px; color: #a42a43; font-size: .8rem; }
 @media (max-width: 650px) { .auth-page { padding: 18px; }.auth-card { padding: 26px 21px; }.toolbar { max-width: none; }.table-actions { min-width: 175px; } }
+
+/* Sprint 3 quiz learning objects keep authoring, review, and student feedback visually distinct. */
+.learning-panel, .question-card, .result-banner { border: 1px solid #e1e7f2; border-radius: 12px; padding: 22px; background: #fff; box-shadow: 0 7px 22px #24315a08; }
+.generation-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 18px; }
+.generation-form > .field:first-child, .document-picker, .generation-form > .form-error, .generation-form > .button { grid-column: 1 / -1; }
+.document-picker { margin: 10px 0 20px; border: 1px solid #dbe2ef; border-radius: 10px; padding: 15px; }
+.document-picker legend { padding: 0 6px; color: #33415e; font-size: .82rem; font-weight: 750; }
+.document-picker label { display: flex; gap: 9px; align-items: center; margin: 8px 0; color: #53607b; font-size: .82rem; }
+.document-picker input, .quiz-option input { width: auto; }
+.learning-object-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.learning-card { display: flex; min-height: 210px; flex-direction: column; border: 1px solid #e1e7f2; border-radius: 12px; padding: 19px; background: #fff; }
+.learning-card__header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; color: #7a86a0; font-size: .74rem; }
+.learning-card p { color: #66728f; font-size: .83rem; line-height: 1.55; }
+.learning-card .button { width: fit-content; margin-top: auto; }
+.status-chip--draft { background: #fff3dd; color: #955a0a; }.status-chip--published { background: #e8f8ef; color: #237044; }.status-chip--archived { background: #eef0f5; color: #667085; }
+.quiz-heading { align-items: center; }.quiz-editor, .quiz-attempt { display: grid; gap: 17px; }.quiz-editor > .button, .quiz-attempt > .button { width: fit-content; }
+.parameter-row, .option-editor { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 14px; }
+.question-card h3 { color: #243567; }.question-card textarea { min-height: 82px; }
+.citation-list { margin: 12px 0 0; padding-left: 20px; color: #63718e; font-size: .76rem; line-height: 1.55; }
+.version-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.attempt-summary { margin-bottom: 24px; }.quiz-option { display: flex; gap: 10px; align-items: flex-start; margin: 9px 0; border: 1px solid #e2e7f1; border-radius: 9px; padding: 11px 13px; color: #3f4c68; font-size: .86rem; }.quiz-option:has(input:checked) { border-color: #7893e2; background: #f1f5ff; }
+.question-card--correct { border-color: #a8d8bd; }.question-card--incorrect { border-color: #efbac4; }.quiz-feedback { margin-top: 15px; border-top: 1px solid #e5e9f2; padding-top: 14px; color: #45536f; font-size: .84rem; line-height: 1.55; }
+.correct-answer-label { color: #237044; font-size: .76rem; }
+.result-banner { display: flex; align-items: center; justify-content: space-between; gap: 20px; border-color: #b9c9f1; background: #f4f7ff; }.result-banner h2 { color: #2447a7; font-size: 1.8rem; }
+input:disabled, textarea:disabled, select:disabled { cursor: not-allowed; background: #f2f4f8; color: #6f7990; }
+@media (max-width: 900px) { .learning-object-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 650px) { .generation-form, .learning-object-grid, .parameter-row, .option-editor { grid-template-columns: 1fr; }.result-banner { display: grid; }.quiz-heading .table-actions { flex-wrap: wrap; } }
+
+/* Product UI uses restrained surfaces and decoration only where it supports a task. */
+.button, input, textarea, select { border-radius: 3px; }
+.button { box-shadow: none; }
+.brand__mark { border-radius: 2px; }
+.sidebar__link { border-radius: 2px; }
+.sidebar__note, .sidebar__icon, .avatar, .app-state__icon, .dropzone__icon { display: none; }
+.topbar { min-height: 62px; padding-top: 10px; padding-bottom: 10px; }
+.topbar__account { margin-left: auto; }
+.page-content { padding-top: 30px; }
+.notice-banner, .summary-card, .course-card, .app-state, .modal, .toast, .dropzone,
+.document-table-wrap, .learning-panel, .question-card, .result-banner, .document-picker,
+.learning-card, .rag-result-card, .evidence-card, .auth-card {
+  border-radius: 3px;
+  box-shadow: none;
+}
+.summary-card { min-height: 112px; }
+.course-card { min-height: 190px; }
+.course-card__code, .count-chip, .role-chip, .status-chip, .status-badge { border-radius: 2px; }
+.learning-panel { border-width: 1px 0; padding: 22px 0; }
+.learning-object-list { border-top: 1px solid #e1e7f2; }
+.learning-object-list .learning-card { min-height: 0; border: 0; border-bottom: 1px solid #e1e7f2; padding: 18px 0; }
+.learning-card__header { margin-bottom: 8px; }
+.link-button--danger { color: #aa2940; }
+.login-page { grid-template-columns: 1fr; place-items: center; background: #f6f7fa; }
+.login-card { width: min(100% - 40px, 420px); border: 1px solid #dfe4ed; padding: 34px; background: #fff; }
+.login-card .brand { margin-bottom: 32px; color: #17275a; }
+.login-card h1 { margin-bottom: 6px; }
+.login-page__intro { display: none; }
