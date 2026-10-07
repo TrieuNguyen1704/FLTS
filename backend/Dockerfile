@@ -17,5 +17,5 @@ RUN mkdir -p storage/app/documents storage/framework/cache storage/framework/ses
     && chmod -R 775 storage bootstrap/cache \
     && composer dump-autoload --optimize
 EXPOSE 8000
-# Demo startup is self-contained: migrations and idempotent seed data run before the API accepts requests.
-CMD ["sh", "-c", "php artisan migrate --force && php artisan db:seed --force --class='Database\\Seeders\\DatabaseSeeder' && php artisan serve --host=0.0.0.0 --port=8000"]
+# Demo startup is self-contained: wait for MySQL readiness, run migrations and idempotent seed data before the API accepts requests.
+CMD ["sh", "-c", "until php -r \"new PDO('mysql:host='.getenv('DB_HOST').';port='.getenv('DB_PORT', 3306), getenv('DB_USERNAME'), getenv('DB_PASSWORD'));\" >/dev/null 2>&1; do echo 'Waiting for database...'; sleep 1; done && php artisan migrate --force && php artisan db:seed --force --class='Database\\Seeders\\DatabaseSeeder' && php artisan serve --host=0.0.0.0 --port=8000"]
