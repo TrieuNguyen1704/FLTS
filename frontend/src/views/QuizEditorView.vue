@@ -14,6 +14,7 @@ const object = ref(null)
 const loading = ref(true)
 const saving = ref(false)
 const publishing = ref(false)
+const deleting = ref(false)
 const error = ref('')
 const form = reactive({ title: '', description: '', passing_score: 60, time_limit_minutes: null, questions: [] })
 
@@ -69,6 +70,20 @@ async function archive() {
   catch (requestError) { error.value = requestError.message || 'Không thể lưu trữ Quiz.' }
 }
 
+async function removeQuiz() {
+  if (!window.confirm(`Bạn có chắc chắn muốn xóa vĩnh viễn Quiz "${object.value.title}"? Toàn bộ câu hỏi, đáp án và kết quả làm bài của sinh viên sẽ bị xóa vĩnh viễn.`)) return
+  deleting.value = true
+  try {
+    await learningObjectService.delete(route.params.courseId, route.params.objectId)
+    toast.show('Đã xóa Quiz thành công.')
+    router.push({ name: 'course-detail', params: { id: route.params.courseId }, query: { tab: 'quizzes' } })
+  } catch (requestError) {
+    error.value = requestError.message || 'Không thể xóa Quiz.'
+  } finally {
+    deleting.value = false
+  }
+}
+
 function statusLabel(status) {
   if (status === 'draft') return 'Bản nháp'
   if (status === 'published') return 'Đã xuất bản'
@@ -86,7 +101,12 @@ onMounted(load)
   <template v-else>
     <section class="page-heading quiz-heading">
       <div><h1>{{ object.title }}</h1><p>Kiểm tra câu hỏi, đáp án, giải thích và nguồn trước khi xuất bản.</p></div>
-      <div class="table-actions"><span class="status-chip" :class="`status-chip--${object.status}`">{{ statusLabel(object.status) }}</span><BaseButton v-if="object.status === 'draft'" :loading="publishing" @click="publish">Phê duyệt và xuất bản</BaseButton><BaseButton v-if="object.status !== 'archived'" variant="danger-ghost" @click="archive">Lưu trữ</BaseButton></div>
+      <div class="table-actions">
+        <span class="status-chip" :class="`status-chip--${object.status}`">{{ statusLabel(object.status) }}</span>
+        <BaseButton v-if="object.status === 'draft'" :loading="publishing" @click="publish">Phê duyệt và xuất bản</BaseButton>
+        <BaseButton v-if="object.status !== 'archived'" variant="secondary" @click="archive">Lưu trữ</BaseButton>
+        <BaseButton variant="danger-ghost" :loading="deleting" @click="removeQuiz">Xóa Quiz</BaseButton>
+      </div>
     </section>
     <form class="quiz-editor" @submit.prevent="save">
       <div class="learning-panel">

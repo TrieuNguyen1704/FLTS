@@ -252,6 +252,7 @@ async def process_document(
     processing_run_id: Annotated[str, Form()],
     extension: Annotated[str, Form()],
     mime_type: Annotated[str, Form()],
+    max_pages: Annotated[int | None, Form()] = None,
 ) -> dict[str, Any]:
     content = await file.read()
     # Parsing, provider retries and Chroma writes are synchronous. Running them in FastAPI's
@@ -265,6 +266,7 @@ async def process_document(
         processing_run_id,
         extension,
         mime_type,
+        max_pages,
     )
 
 
@@ -276,8 +278,9 @@ def process_document_content(
     processing_run_id: str,
     extension: str,
     mime_type: str,
+    max_pages: int | None = None,
 ) -> dict[str, Any]:
-    extracted = extract_document(content, extension)
+    extracted = extract_document(content, extension, max_pages=max_pages)
     chunks = chunk_text(extracted.text)
     if not chunks:
         raise PipelineError('NO_CHUNKS_CREATED', 'No chunks could be created from the extracted text.', 'chunking')

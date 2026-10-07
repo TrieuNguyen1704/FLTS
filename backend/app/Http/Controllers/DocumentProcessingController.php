@@ -21,7 +21,11 @@ class DocumentProcessingController
             return response()->json(['message' => 'This document is already being processed.'], 422);
         }
 
-        $run = $this->queueRun($request, $document);
+        $data = $request->validate([
+            'max_pages' => ['nullable', 'integer', 'min:1', 'max:500'],
+        ]);
+
+        $run = $this->queueRun($request, $document, $data['max_pages'] ?? null);
         return response()->json(['run' => $this->runSummary($run), 'message' => 'Document processing queued.'], 202);
     }
 
@@ -30,7 +34,11 @@ class DocumentProcessingController
         $this->ensureOwner($request, $course, $document);
         abort_unless($document->processing_status === 'failed', 422, 'Only a failed document can be retried.');
 
-        $run = $this->queueRun($request, $document);
+        $data = $request->validate([
+            'max_pages' => ['nullable', 'integer', 'min:1', 'max:500'],
+        ]);
+
+        $run = $this->queueRun($request, $document, $data['max_pages'] ?? null);
         return response()->json(['run' => $this->runSummary($run), 'message' => 'Document retry queued.'], 202);
     }
 
@@ -91,23 +99,26 @@ class DocumentProcessingController
         }
     }
 
-    private function queueRun(Request $request, TeachingDocument $document): DocumentProcessingRun
+    private function queueRun(Request $request, TeachingDocument $document, ?int $maxPages = null): DocumentProcessingRun
     {
-        $run = DB::transaction(function () use ($request, $document) {
+        $run = DB::transaction(function () use ($request, $document, $maxPages) {
             $document->refresh();
             $attempt = ((int) $document->processingRuns()->max('attempt_number')) + 1;
+            $pipelineConfig = [
+                'parser' => 'pypdf/python-docx',
+                'chunking' => 'paragraph-window-v1',
+                // Record the selected model with each run so environment changes do not rewrite history.
+                'embedding_model' => (string) config('rag.embedding_model'),
+            ];
+            if ($maxPages !== null && $maxPages > 0) {
+                $pipelineConfig['max_pages'] = $maxPages;
+            }
             $run = $document->processingRuns()->create([
                 'requested_by' => $request->user()->id,
                 'attempt_number' => $attempt,
                 'status' => 'queued',
                 'stage' => 'queued',
-                // Versioned input makes later parser/chunk changes auditable rather than silently altering a run.
-                'pipeline_config' => [
-                    'parser' => 'pypdf/python-docx',
-                    'chunking' => 'paragraph-window-v1',
-                    // Record the selected model with each run so environment changes do not rewrite history.
-                    'embedding_model' => (string) config('rag.embedding_model'),
-                ],
+                'pipeline_config' => $pipelineConfig,
             ]);
             $document->update([
                 'latest_processing_run_id' => $run->id,

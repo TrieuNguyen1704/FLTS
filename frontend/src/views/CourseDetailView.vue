@@ -49,6 +49,11 @@ const error = ref('')
 const uploading = ref(false)
 const documentToDelete = ref(null)
 const deleting = ref(false)
+const documentToProcess = ref(null)
+const processOption = ref('demo')
+const processingDocument = ref(false)
+const quizToDelete = ref(null)
+const deletingQuiz = ref(false)
 const showEdit = ref(false)
 const savingCourse = ref(false)
 const searchQuery = ref('')
@@ -170,6 +175,21 @@ async function removeDocument() {
   }
 }
 
+async function removeQuiz() {
+  if (!quizToDelete.value) return
+  deletingQuiz.value = true
+  try {
+    await learningObjectService.delete(course.value.id, quizToDelete.value.id)
+    quizzes.value = quizzes.value.filter((q) => q.id !== quizToDelete.value.id)
+    toast.show('Đã xóa bài kiểm tra.')
+    quizToDelete.value = null
+  } catch (requestError) {
+    toast.show(requestError.message || 'Không thể xóa bài kiểm tra.', 'error')
+  } finally {
+    deletingQuiz.value = false
+  }
+}
+
 async function downloadDocument(doc) {
   try {
     await documentService.download(course.value.id, doc)
@@ -179,21 +199,35 @@ async function downloadDocument(doc) {
   }
 }
 
-async function processDocument(doc) {
+function openProcessModal(doc) {
+  documentToProcess.value = doc
+  processOption.value = 'demo'
+}
+
+async function confirmProcessDocument() {
+  if (!documentToProcess.value) return
+  const doc = documentToProcess.value
   processingIds.value = { ...processingIds.value, [doc.id]: true }
+  processingDocument.value = true
   try {
+    const payload = processOption.value === 'demo' ? { max_pages: 25 } : {}
     const request =
       doc.processing_status === 'failed'
-        ? ragService.retryProcessing(course.value.id, doc.id)
-        : ragService.startProcessing(course.value.id, doc.id)
+        ? ragService.retryProcessing(course.value.id, doc.id, payload)
+        : ragService.startProcessing(course.value.id, doc.id, payload)
     await request
-    toast.show('Tài liệu đã được đưa vào hàng đợi xử lý.')
+    toast.show(
+      processOption.value === 'demo'
+        ? 'Tài liệu đã được đưa vào hàng đợi xử lý nhanh (25 trang đầu).'
+        : 'Tài liệu đã được đưa vào hàng đợi xử lý toàn bộ.'
+    )
     doc.processing_status = 'processing'
-    // Refresh background tasks store
+    documentToProcess.value = null
     backgroundTasks.fetchTasks()
   } catch (requestError) {
     toast.show(requestError.message || 'Không thể bắt đầu xử lý tài liệu.', 'error')
   } finally {
+    processingDocument.value = false
     const next = { ...processingIds.value }
     delete next[doc.id]
     processingIds.value = next
@@ -484,7 +518,7 @@ onMounted(loadCourse)
                   v-if="doc.processing_status !== 'processing'"
                   variant="secondary"
                   :loading="Boolean(processingIds[doc.id])"
-                  @click="processDocument(doc)"
+                  @click="openProcessModal(doc)"
                 >
                   {{ doc.processing_status === 'failed' ? 'Thử xử lý lại' : 'Xử lý tài liệu' }}
                 </BaseButton>
@@ -530,12 +564,21 @@ onMounted(loadCourse)
             <span v-if="quiz.quiz" class="quiz-spec">
               {{ quiz.quiz.total_questions || '—' }} câu hỏi | Đạt: {{ quiz.quiz.passing_score }}%
             </span>
-            <RouterLink
-              class="button button--secondary button--small"
-              :to="{ name: 'quiz-editor', params: { courseId: course.id, objectId: quiz.id } }"
-            >
-              Chỉnh sửa & Xem
-            </RouterLink>
+            <div class="table-actions">
+              <RouterLink
+                class="button button--secondary button--small"
+                :to="{ name: 'quiz-editor', params: { courseId: course.id, objectId: quiz.id } }"
+              >
+                Chỉnh sửa & Xem
+              </RouterLink>
+              <BaseButton
+                variant="danger-ghost"
+                class="button--small"
+                @click="quizToDelete = quiz"
+              >
+                Xóa
+              </BaseButton>
+            </div>
           </div>
         </article>
       </div>
@@ -668,6 +711,49 @@ onMounted(loadCourse)
   >
     <p>
       Bạn có chắc chắn muốn xóa tài liệu <strong>{{ documentToDelete?.original_name }}</strong>? Thao tác này sẽ xóa tệp tin và toàn bộ dữ liệu vector liên quan.
+    </p>
+  </AppModal>
+
+  <!-- MODAL: TÙY CHỌN XỬ LÝ RAG TÀI LIỆU -->
+  <AppModal
+    v-model="documentToProcess"
+    title="Tùy chọn xử lý RAG tài liệu"
+    confirm-label="Bắt đầu xử lý"
+    :loading="processingDocument"
+    @confirm="confirmProcessDocument"
+  >
+    <p>
+      Chọn chế độ xử lý ngữ cảnh cho tài liệu <strong>{{ documentToProcess?.original_name }}</strong>:
+    </p>
+    <div class="process-options-list">
+      <label class="process-option" :class="{ 'process-option--selected': processOption === 'demo' }">
+        <input v-model="processOption" type="radio" value="demo" />
+        <div class="process-option__content">
+          <strong>⚡ Xử lý nhanh cho Demo (25 trang đầu - Khuyên dùng)</strong>
+          <p>Tối ưu tốc độ trình chiếu (chỉ ~10-15 giây). Đủ kiến thức 1 chương hoàn chỉnh để tạo Quiz mà không bị giới hạn Free Tier API.</p>
+        </div>
+      </label>
+      <label class="process-option" :class="{ 'process-option--selected': processOption === 'full' }">
+        <input v-model="processOption" type="radio" value="full" />
+        <div class="process-option__content">
+          <strong>📖 Xử lý toàn bộ tài liệu</strong>
+          <p>Trích xuất toàn bộ các trang. Khuyên dùng cho tài liệu ngắn hoặc môi trường có Google Gemini API trả phí (Pay-As-You-Go).</p>
+        </div>
+      </label>
+    </div>
+  </AppModal>
+
+  <!-- MODAL: XÓA QUIZ -->
+  <AppModal
+    v-model="quizToDelete"
+    title="Xác nhận xóa bài kiểm tra (Quiz)"
+    confirm-label="Xóa bài kiểm tra"
+    :danger="true"
+    :loading="deletingQuiz"
+    @confirm="removeQuiz"
+  >
+    <p>
+      Bạn có chắc chắn muốn xóa bài kiểm tra <strong>{{ quizToDelete?.title }}</strong>? Thao tác này sẽ xóa vĩnh viễn toàn bộ câu hỏi, đáp án và lịch sử làm bài liên quan của sinh viên.
     </p>
   </AppModal>
 
@@ -1117,6 +1203,54 @@ onMounted(loadCourse)
 .status-chip--inactive {
   background: #f1f5f9;
   color: #64748b;
+}
+
+.process-options-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 14px 0 8px;
+}
+
+.process-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+  cursor: pointer;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+
+.process-option:hover {
+  background: #f1f5f9;
+}
+
+.process-option--selected {
+  border-color: #2958d8;
+  background: #eff6ff;
+}
+
+.process-option input[type="radio"] {
+  width: auto;
+  margin-top: 3px;
+  cursor: pointer;
+}
+
+.process-option__content strong {
+  display: block;
+  font-size: 0.88rem;
+  color: #1e293b;
+  margin-bottom: 3px;
+}
+
+.process-option__content p {
+  margin: 0;
+  font-size: 0.78rem;
+  color: #64748b;
+  line-height: 1.4;
 }
 
 @media (max-width: 768px) {

@@ -12,7 +12,7 @@ class RagService
     /**
      * Laravel remains the public authorization boundary. FastAPI is reachable only on the Docker network.
      */
-    public function processDocument(TeachingDocument $document, int $runId): array
+    public function processDocument(TeachingDocument $document, int $runId, ?int $maxPages = null): array
     {
         $stream = fopen(storage_path('app/'.$document->stored_path), 'r');
         if ($stream === false) {
@@ -20,13 +20,17 @@ class RagService
         }
 
         try {
-            $response = $this->client()->attach('file', $stream, $document->original_name)->post('/internal/v1/documents/process', [
+            $data = [
                 'document_id' => (string) $document->id,
                 'course_id' => (string) $document->course_id,
                 'processing_run_id' => (string) $runId,
                 'mime_type' => $document->mime_type,
                 'extension' => $document->extension,
-            ]);
+            ];
+            if ($maxPages !== null && $maxPages > 0) {
+                $data['max_pages'] = (string) $maxPages;
+            }
+            $response = $this->client()->attach('file', $stream, $document->original_name)->post('/internal/v1/documents/process', $data);
         } finally {
             fclose($stream);
         }

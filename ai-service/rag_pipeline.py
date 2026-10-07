@@ -30,10 +30,10 @@ class ExtractedDocument:
     metadata: dict[str, Any]
 
 
-def extract_document(content: bytes, extension: str) -> ExtractedDocument:
+def extract_document(content: bytes, extension: str, max_pages: int | None = None) -> ExtractedDocument:
     extension = extension.lower().lstrip('.')
     if extension == 'pdf':
-        return _extract_pdf(content)
+        return _extract_pdf(content, max_pages=max_pages)
     if extension == 'docx':
         return _extract_docx(content)
     if extension == 'doc':
@@ -41,16 +41,19 @@ def extract_document(content: bytes, extension: str) -> ExtractedDocument:
     raise PipelineError('UNSUPPORTED_FILE_TYPE', 'Only PDF and DOCX are processable in this Sprint 2 slice.', 'extracting')
 
 
-def _extract_pdf(content: bytes) -> ExtractedDocument:
+def _extract_pdf(content: bytes, max_pages: int | None = None) -> ExtractedDocument:
     try:
         reader = PdfReader(BytesIO(content))
         if reader.is_encrypted:
             raise PipelineError('PDF_ENCRYPTED', 'Password-protected PDFs cannot be processed.', 'extracting')
         pages = []
-        for index, page in enumerate(reader.pages, start=1):
+        total_pages = len(reader.pages)
+        limit = total_pages if (max_pages is None or max_pages <= 0) else min(total_pages, max_pages)
+        for index in range(limit):
+            page = reader.pages[index]
             page_text = (page.extract_text() or '').strip()
             if page_text:
-                pages.append(f'[Page {index}]\n{page_text}')
+                pages.append(f'[Page {index + 1}]\n{page_text}')
     except PipelineError:
         raise
     except Exception as exception:  # pypdf exposes several version-specific parser exceptions.
@@ -59,7 +62,11 @@ def _extract_pdf(content: bytes) -> ExtractedDocument:
     text = clean_text('\n\n'.join(pages))
     if not text:
         raise PipelineError('NO_EXTRACTABLE_TEXT', 'No extractable text was found. Scanned PDFs need OCR, which is not included in Sprint 2.', 'extracting')
-    return ExtractedDocument(text=text, page_count=len(reader.pages), metadata={'parser': 'pypdf'})
+    return ExtractedDocument(
+        text=text,
+        page_count=limit,
+        metadata={'parser': 'pypdf', 'extracted_pages': limit, 'total_pages': total_pages}
+    )
 
 
 def _extract_docx(content: bytes) -> ExtractedDocument:
