@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import AppModal from '../components/AppModal.vue'
 import AppState from '../components/AppState.vue'
 import BaseButton from '../components/BaseButton.vue'
 import BaseInput from '../components/BaseInput.vue'
@@ -18,6 +19,8 @@ const objects = ref([])
 const loading = ref(true)
 const submitting = ref(false)
 const retryingId = ref(null)
+const quizToDelete = ref(null)
+const deleting = ref(false)
 const error = ref('')
 const activeObjectId = ref(null)
 let pollTimer = null
@@ -124,6 +127,21 @@ async function retryGeneration(object) {
   }
 }
 
+async function removeQuiz() {
+  if (!quizToDelete.value) return
+  deleting.value = true
+  try {
+    await learningObjectService.delete(route.params.courseId, quizToDelete.value.id)
+    objects.value = objects.value.filter((item) => item.id !== quizToDelete.value.id)
+    toast.show('Đã xóa Quiz thành công.')
+    quizToDelete.value = null
+  } catch (err) {
+    toast.show(err.message || 'Không thể xóa Quiz.', 'error')
+  } finally {
+    deleting.value = false
+  }
+}
+
 onMounted(async () => {
   await load()
   pollTimer = window.setInterval(pollPending, 3000)
@@ -180,10 +198,25 @@ onBeforeUnmount(() => window.clearInterval(pollTimer))
           <div class="table-actions">
             <RouterLink v-if="object.generation?.status === 'completed' || object.quiz" class="button button--secondary" :to="{ name: 'quiz-editor', params: { courseId: course.id, objectId: object.id } }">Mở Quiz</RouterLink>
             <BaseButton v-if="object.generation?.status === 'failed'" variant="secondary" :loading="retryingId === object.id" @click="retryGeneration(object)">Thử lại</BaseButton>
+            <BaseButton variant="danger-ghost" @click="quizToDelete = object">Xóa</BaseButton>
           </div>
         </article>
       </div>
       <AppState v-else title="Chưa có Quiz" message="Tạo Quiz đầu tiên từ tài liệu của khóa học." />
     </section>
+
+    <!-- MODAL: XÓA QUIZ -->
+    <AppModal
+      v-model="quizToDelete"
+      title="Xác nhận xóa Quiz"
+      confirm-label="Xóa Quiz"
+      :danger="true"
+      :loading="deleting"
+      @confirm="removeQuiz"
+    >
+      <p>
+        Bạn có chắc chắn muốn xóa bài kiểm tra <strong>{{ quizToDelete?.title }}</strong>? Thao tác này sẽ xóa vĩnh viễn toàn bộ câu hỏi, đáp án và lịch sử làm bài liên quan.
+      </p>
+    </AppModal>
   </template>
 </template>

@@ -54,6 +54,7 @@ Route::middleware('auth.token')->group(function () {
     Route::patch('/courses/{course}/learning-objects/{learningObject}', [LearningObjectController::class, 'update'])->middleware('role:lecturer');
     Route::post('/courses/{course}/learning-objects/{learningObject}/publish', [LearningObjectController::class, 'publish'])->middleware('role:lecturer');
     Route::post('/courses/{course}/learning-objects/{learningObject}/archive', [LearningObjectController::class, 'archive'])->middleware('role:lecturer');
+    Route::delete('/courses/{course}/learning-objects/{learningObject}', [LearningObjectController::class, 'destroy'])->middleware('role:lecturer');
     Route::post('/courses/{course}/learning-objects/{learningObject}/quiz-attempts', [QuizAttemptController::class, 'start'])->middleware('role:student');
     Route::post('/courses/{course}/learning-objects/{learningObject}/quiz-attempts/{attempt}/submit', [QuizAttemptController::class, 'submit'])->middleware('role:student');
     Route::get('/courses/{course}/learning-objects/{learningObject}/quiz-attempts', [QuizAttemptController::class, 'history'])->middleware('role:student');

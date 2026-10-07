@@ -8,6 +8,7 @@ export const learningObjectService = {
   update: (courseId, objectId, payload) => apiRequest(`/courses/${courseId}/learning-objects/${objectId}`, { method: 'PATCH', body: JSON.stringify(payload) }),
   publish: (courseId, objectId) => apiRequest(`/courses/${courseId}/learning-objects/${objectId}/publish`, { method: 'POST' }),
   archive: (courseId, objectId) => apiRequest(`/courses/${courseId}/learning-objects/${objectId}/archive`, { method: 'POST' }),
+  delete: (courseId, objectId) => apiRequest(`/courses/${courseId}/learning-objects/${objectId}`, { method: 'DELETE' }),
   startAttempt: (courseId, objectId) => apiRequest(`/courses/${courseId}/learning-objects/${objectId}/quiz-attempts`, { method: 'POST' }),
   submitAttempt: (courseId, objectId, attemptId, answers) => apiRequest(`/courses/${courseId}/learning-objects/${objectId}/quiz-attempts/${attemptId}/submit`, {
     method: 'POST',

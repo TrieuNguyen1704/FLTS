@@ -183,6 +183,19 @@ class LearningObjectController
         return response()->json(['learning_object' => $this->detail($learningObject->fresh()), 'message' => 'Learning object archived.']);
     }
 
+    public function destroy(Request $request, Course $course, LearningObject $learningObject): JsonResponse
+    {
+        $this->ensureObjectCourse($course, $learningObject);
+        $this->ensureOwner($request, $course);
+
+        DB::transaction(function () use ($learningObject) {
+            $learningObject->delete();
+        });
+
+        return response()->json(['message' => 'Quiz đã được xóa thành công.']);
+    }
+
+
     private function replaceQuestions(Quiz $quiz, array $questions): void
     {
         $quiz->questions()->delete();

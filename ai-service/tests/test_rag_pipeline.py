@@ -85,6 +85,13 @@ def test_extracts_text_based_pdf_with_page_metadata() -> None:
     assert 'Hello FLTS' in result.text
 
 
+def test_extract_document_supports_max_pages() -> None:
+    result = extract_document(text_pdf('Hello Page 1'), 'pdf', max_pages=1)
+    assert result.page_count == 1
+    assert result.metadata['extracted_pages'] == 1
+    assert 'Hello Page 1' in result.text
+
+
 def test_empty_pdf_and_corrupt_pdf_fail_without_false_text() -> None:
     for content in (text_pdf(''), b'not a pdf'):
         try:

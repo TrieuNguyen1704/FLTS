@@ -211,6 +211,57 @@ class SprintThreeQuizApiTest extends TestCase
         Queue::assertPushed(GenerateQuizLearningObject::class, fn ($job) => $job->runId === $retry->id);
     }
 
+    public function test_lecturer_can_delete_learning_object_and_cascades_relations(): void
+    {
+        [$lecturer, , $course, $lecturerToken] = $this->courseActors();
+        $draft = $this->createDraft($course, $lecturerToken);
+        $quizId = $draft->quiz->id;
+
+        $this->assertDatabaseHas('learning_objects', ['id' => $draft->id]);
+        $this->assertDatabaseHas('quizzes', ['id' => $quizId]);
+        $this->assertGreaterThan(0, $draft->versions()->count());
+        $this->assertGreaterThan(0, $draft->quiz->questions()->count());
+
+        $response = $this->withToken($lecturerToken)
+            ->deleteJson("/api/courses/{$course->id}/learning-objects/{$draft->id}")
+            ->assertOk()
+            ->assertJsonPath('message', 'Quiz đã được xóa thành công.');
+
+        $this->assertDatabaseMissing('learning_objects', ['id' => $draft->id]);
+        $this->assertDatabaseMissing('quizzes', ['id' => $quizId]);
+        $this->assertDatabaseCount('learning_object_versions', 0);
+        $this->assertDatabaseCount('quiz_questions', 0);
+        $this->assertDatabaseCount('quiz_options', 0);
+    }
+
+    public function test_student_and_unauthorized_lecturer_cannot_delete_learning_object(): void
+    {
+        [, $student, $course, $lecturerToken, $studentToken] = $this->courseActors();
+        $draft = $this->createDraft($course, $lecturerToken);
+
+        $otherLecturer = User::create([
+            'name' => 'Other Lecturer',
+            'email' => 'other_lecturer@flts.test',
+            'password' => bcrypt('Password123!'),
+            'role' => 'lecturer',
+        ]);
+        $otherToken = $this->tokenFor($otherLecturer, 'other-lecturer-token');
+
+        // Student cannot delete
+        $this->withToken($studentToken)
+            ->deleteJson("/api/courses/{$course->id}/learning-objects/{$draft->id}")
+            ->assertForbidden();
+
+        // Other lecturer cannot delete
+        $this->withToken($otherToken)
+            ->deleteJson("/api/courses/{$course->id}/learning-objects/{$draft->id}")
+            ->assertForbidden();
+
+        // Object remains in database
+        $this->assertDatabaseHas('learning_objects', ['id' => $draft->id]);
+    }
+
+
     private function courseActors(): array
     {
         $lecturer = User::create(['name' => 'Lecturer', 'email' => 'lecturer3@flts.test', 'password' => bcrypt('Password123!'), 'role' => 'lecturer']);

@@ -19,8 +19,8 @@ class ProcessTeachingDocument implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public int $tries = 3;
-    public int $timeout = 600;
+    public int $tries = 1;
+    public int $timeout = 900;
 
     public function __construct(public int $runId)
     {
@@ -45,7 +45,8 @@ class ProcessTeachingDocument implements ShouldQueue
         $run->update(['status' => 'processing', 'stage' => 'extracting', 'started_at' => now(), 'error_detail' => null]);
         $document->update(['processing_status' => 'processing', 'processing_error' => null]);
 
-        $payload = $rag->processDocument($document, $run->id);
+        $maxPages = $run->pipeline_config['max_pages'] ?? null;
+        $payload = $rag->processDocument($document, $run->id, $maxPages ? (int) $maxPages : null);
         try {
             $this->persistResult($run, $payload);
         } catch (Throwable $exception) {
