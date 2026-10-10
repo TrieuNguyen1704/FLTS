@@ -190,14 +190,14 @@ function navigateToTask(task) {
 }
 
 .task-center__trigger:hover {
-  background: #eef2ff;
+  background: var(--cds-blue-tint);
   border-color: #cbd5e1;
 }
 
 .task-center__trigger--has-active {
-  border-color: #2958d8;
-  color: #2958d8;
-  background: #f0f4ff;
+  border-color: var(--cds-blue-primary);
+  color: var(--cds-blue-primary);
+  background: var(--cds-blue-tint);
 }
 
 .task-center__icon {
@@ -221,7 +221,7 @@ function navigateToTask(task) {
   height: 18px;
   padding: 0 5px;
   border-radius: 9px;
-  background: #2958d8;
+  background: var(--cds-blue-primary);
   color: #fff;
   font-size: 11px;
   font-weight: 700;
@@ -398,7 +398,7 @@ function navigateToTask(task) {
 .task-progress__indeterminate-bar {
   height: 100%;
   width: 40%;
-  background: #2958d8;
+  background: var(--cds-blue-primary);
   border-radius: 2px;
   animation: indeterminate 1.4s infinite ease-in-out;
 }
@@ -500,7 +500,7 @@ function navigateToTask(task) {
 
 .button-sub--link {
   background: transparent;
-  color: #2958d8;
+  color: var(--cds-blue-primary);
 }
 
 .button-sub--link:hover {

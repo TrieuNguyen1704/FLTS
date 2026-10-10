@@ -68,13 +68,20 @@ onMounted(loadUsers)
 <template>
   <section class="page-heading">
     <div>
+      <span class="eyebrow">QUẢN TRỊ VIÊN HỆ THỐNG</span>
       <h1>Quản lý tài khoản</h1>
-      <p>Xem danh sách tài khoản đã đăng ký, phân quyền vai trò và quản lý trạng thái truy cập.</p>
+      <p>Xem danh sách tài khoản đã đăng ký, phân quyền vai trò và quản lý trạng thái truy cập toàn hệ thống.</p>
     </div>
   </section>
   <form class="toolbar" @submit.prevent="loadUsers">
     <input v-model="query" placeholder="Tìm kiếm theo tên hoặc email..." aria-label="Tìm kiếm tài khoản" />
-    <BaseButton type="submit" variant="secondary">Tìm kiếm</BaseButton>
+    <BaseButton type="submit" variant="secondary">
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5">
+        <circle cx="11" cy="11" r="8" />
+        <line x1="21" y1="21" x2="16.65" y2="16.65" />
+      </svg>
+      Tìm kiếm
+    </BaseButton>
   </form>
   <AppState v-if="loading" type="loading" title="Đang tải danh sách tài khoản" message="Đang lấy dữ liệu từ hệ thống quản trị." />
   <AppState v-else-if="error" type="error" title="Không thể tải danh sách tài khoản" :message="error" action-label="Thử lại" @action="loadUsers" />

@@ -40,6 +40,7 @@ function drop(event) {
     @dragover.prevent="dragging = true"
     @dragleave="dragging = false"
     @drop.prevent="drop"
+    @click="input.click()"
   >
     <input
       ref="input"
@@ -48,12 +49,19 @@ function drop(event) {
       accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
       @change="fromInput"
     />
-    <h3>Tải lên tài liệu giảng dạy</h3>
+    <div class="dropzone__icon">
+      <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+        <polyline points="17 8 12 3 7 8" />
+        <line x1="12" y1="3" x2="12" y2="15" />
+      </svg>
+    </div>
+    <h3>Tải lên tài liệu giáo trình</h3>
     <p>
       Kéo thả tệp tin vào đây, hoặc
-      <button type="button" class="link-button" @click="input.click()">chọn tệp từ thiết bị</button>.
+      <button type="button" class="link-button" @click.stop="input.click()">chọn tệp từ máy tính</button>
     </p>
-    <small>Định dạng hỗ trợ: PDF, DOC, DOCX · Dung lượng tối đa: 10 MB</small>
+    <small>Hỗ trợ tài liệu: PDF, DOC, DOCX · Tối đa: 10 MB</small>
     <p v-if="error" class="field__error">{{ error }}</p>
   </div>
 </template>
