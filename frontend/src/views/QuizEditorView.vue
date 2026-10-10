@@ -138,22 +138,24 @@ onMounted(load)
 
 <style scoped>
 .math-preview {
-  margin-top: 4px;
-  margin-bottom: 8px;
-  padding: 6px 12px;
-  background: #f8fafc;
-  border-left: 3px solid #3b82f6;
-  border-radius: 4px;
+  margin-top: 6px;
+  margin-bottom: 12px;
+  padding: 8px 14px;
+  background: var(--cds-blue-subtle);
+  border-left: 3px solid var(--cds-blue-primary);
+  border-radius: var(--cds-radius-sm);
   font-size: 0.92rem;
-  color: #1e293b;
+  color: var(--cds-text-primary);
 }
 
 .math-preview small {
   display: block;
   font-size: 0.74rem;
-  color: #64748b;
-  margin-bottom: 2px;
-  font-weight: 500;
+  color: var(--cds-blue-primary);
+  margin-bottom: 3px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .option-field-wrap {
@@ -162,12 +164,13 @@ onMounted(load)
 }
 
 .option-preview {
-  margin-top: 2px;
-  margin-bottom: 6px;
-  padding: 4px 10px;
-  background: #f1f5f9;
-  border-radius: 4px;
+  margin-top: 4px;
+  margin-bottom: 8px;
+  padding: 6px 12px;
+  background: var(--cds-bg-subtle);
+  border: 1px solid var(--cds-border-light);
+  border-radius: var(--cds-radius-sm);
   font-size: 0.88rem;
-  color: #334155;
+  color: var(--cds-text-primary);
 }
 </style>

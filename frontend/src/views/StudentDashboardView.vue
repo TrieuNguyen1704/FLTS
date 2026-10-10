@@ -62,24 +62,43 @@ onMounted(loadCourses)
 <template>
   <section class="page-heading">
     <div>
+      <span class="eyebrow">HỌC TẬP TRỰC TUYẾN</span>
       <h1>Khóa học của tôi</h1>
-      <p>Danh sách khóa học bạn được cấp quyền truy cập hoặc đã ghi danh.</p>
+      <p>Danh sách các khóa học bạn đang tham gia. Học lý thuyết và hoàn thành Quiz tự đánh giá.</p>
     </div>
     <div>
-      <BaseButton @click="openJoinModal">+ Tham gia bằng mã</BaseButton>
+      <BaseButton @click="openJoinModal">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5">
+          <line x1="12" y1="5" x2="12" y2="19" />
+          <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+        Tham gia bằng mã
+      </BaseButton>
     </div>
   </section>
+
   <section v-if="loading" class="course-grid">
     <div v-for="index in 2" :key="index" class="course-card skeleton" />
   </section>
+
   <section v-else-if="error">
-    <AppState type="error" title="Không thể tải danh sách khóa học" :message="error" action-label="Thử lại" @action="loadCourses" />
+    <AppState
+      type="error"
+      title="Không thể tải danh sách khóa học"
+      :message="error"
+      action-label="Thử lại"
+      @action="loadCourses"
+    />
   </section>
+
   <section v-else-if="courses.length" class="course-grid">
     <CourseCard v-for="course in courses" :key="course.id" :course="course" compact>
-      <RouterLink class="inline-link" :to="{ name: 'student-course', params: { courseId: course.id } }">Mở không gian học tập</RouterLink>
+      <RouterLink class="inline-link" :to="{ name: 'student-course', params: { courseId: course.id } }">
+        Vào học ngay →
+      </RouterLink>
     </CourseCard>
   </section>
+
   <AppState
     v-else
     title="Chưa có khóa học nào"
@@ -113,14 +132,6 @@ onMounted(loadCourses)
 </template>
 
 <style scoped>
-.page-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
 .join-modal-content {
   display: flex;
   flex-direction: column;
@@ -128,18 +139,18 @@ onMounted(loadCourses)
 }
 
 .join-modal-description {
-  color: #64748b;
+  color: var(--cds-text-secondary);
   font-size: 0.88rem;
   line-height: 1.5;
   margin: 0;
 }
 
 .join-modal-description code {
-  background: #f1f5f9;
+  background: var(--cds-blue-tint);
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--cds-radius-sm);
   font-family: monospace;
-  font-weight: 600;
-  color: #2563eb;
+  font-weight: 700;
+  color: var(--cds-blue-primary);
 }
 </style>

@@ -150,59 +150,161 @@ onBeforeUnmount(() => window.clearInterval(pollTimer))
 </script>
 
 <template>
-  <button class="back-link" @click="router.push({ name: 'course-detail', params: { id: route.params.courseId } })">Quay lại khóa học</button>
-  <AppState v-if="loading" type="loading" title="Đang tải học liệu" message="Vui lòng chờ trong giây lát." />
-  <AppState v-else-if="error && !course" type="error" title="Không thể mở học liệu" :message="error" action-label="Thử lại" @action="load" />
+  <button class="back-link" @click="router.push({ name: 'course-detail', params: { id: route.params.courseId } })">
+    ← Quay lại khóa học
+  </button>
+
+  <AppState
+    v-if="loading"
+    type="loading"
+    title="Đang tải học liệu"
+    message="Đang kiểm tra tài liệu và danh sách Quiz của khóa học..."
+  />
+  <AppState
+    v-else-if="error && !course"
+    type="error"
+    title="Không thể mở học liệu"
+    :message="error"
+    action-label="Thử lại"
+    @action="load"
+  />
+
   <template v-else>
     <section class="page-heading">
       <div>
-        <p class="eyebrow">{{ course.code }}</p>
-        <h1>Quiz</h1>
-        <p>Tạo câu hỏi từ tài liệu của khóa học, kiểm tra nội dung và xuất bản cho sinh viên.</p>
+        <span class="eyebrow">{{ course.code }} · BIÊN SOẠN BÀI TẬP</span>
+        <h1>Quản lý Quiz tự động</h1>
+        <p>Tạo bộ câu hỏi trắc nghiệm tự động từ tài liệu giáo trình thông qua AI RAG, kiểm tra nội dung và xuất bản cho sinh viên.</p>
       </div>
     </section>
 
+    <!-- Quiz Generation Builder Panel -->
     <section class="learning-panel">
       <header class="section-header">
-        <div><h2>Tạo Quiz mới</h2><p>Chọn chủ đề, độ khó, số câu hỏi và tài liệu nguồn.</p></div>
+        <div>
+          <h2>Tạo Quiz mới bằng AI RAG</h2>
+          <p>Hệ thống tự động tìm kiếm đoạn văn liên quan trong giáo trình và tạo câu hỏi kèm đáp án giải thích.</p>
+        </div>
       </header>
+
       <form class="generation-form" @submit.prevent="generateQuiz">
-        <BaseInput v-model="form.title" label="Tiêu đề (không bắt buộc)" placeholder="Nhập tiêu đề Quiz" />
-        <BaseInput v-model="form.topic" label="Chủ đề" placeholder="Nhập chủ đề cần kiểm tra" required />
-        <label class="field"><span class="field__label">Độ khó</span><select v-model="form.difficulty"><option value="easy">Dễ</option><option value="medium">Trung bình</option><option value="hard">Khó</option></select></label>
-        <label class="field"><span class="field__label">Số câu hỏi</span><input v-model.number="form.question_count" type="number" min="3" max="20" /></label>
-        <label class="field"><span class="field__label">Số nguồn tham khảo</span><input v-model.number="form.top_k" type="number" min="3" max="15" /></label>
-        <label class="field"><span class="field__label">Điểm đạt (%)</span><input v-model.number="form.passing_score" type="number" min="0" max="100" /></label>
-        <label class="field"><span class="field__label">Thời gian làm bài (phút)</span><input v-model.number="form.time_limit_minutes" type="number" min="1" max="480" placeholder="Không giới hạn" /></label>
+        <BaseInput v-model="form.title" label="Tiêu đề Quiz (không bắt buộc)" placeholder="Ví dụ: Kiểm tra Tuần 1 - Khái niệm cơ bản" />
+        <BaseInput v-model="form.topic" label="Chủ đề kiểm tra" placeholder="Ví dụ: Ma trận nghịch đảo và định thức" required />
+
+        <label class="field">
+          <span class="field__label">Độ khó</span>
+          <select v-model="form.difficulty">
+            <option value="easy">Dễ (Nhận biết & Thông hiểu)</option>
+            <option value="medium">Trung bình (Vận dụng)</option>
+            <option value="hard">Khó (Vận dụng nâng cao)</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span class="field__label">Số lượng câu hỏi</span>
+          <input v-model.number="form.question_count" type="number" min="3" max="20" />
+        </label>
+
+        <label class="field">
+          <span class="field__label">Số đoạn trích xuất tham khảo (Top K)</span>
+          <input v-model.number="form.top_k" type="number" min="3" max="15" />
+        </label>
+
+        <label class="field">
+          <span class="field__label">Điểm đạt yêu cầu (%)</span>
+          <input v-model.number="form.passing_score" type="number" min="0" max="100" />
+        </label>
+
+        <label class="field">
+          <span class="field__label">Thời gian làm bài (phút)</span>
+          <input v-model.number="form.time_limit_minutes" type="number" min="1" max="480" placeholder="Để trống nếu không giới hạn" />
+        </label>
+
         <fieldset class="document-picker">
-          <legend>Tài liệu nguồn</legend>
-          <p v-if="!processedDocuments.length" class="muted">Chưa có tài liệu sẵn sàng. Hãy xử lý ít nhất một tài liệu trước khi tạo Quiz.</p>
+          <legend>Tài liệu giáo trình nguồn</legend>
+          <p v-if="!processedDocuments.length" class="muted">
+            Chưa có tài liệu sẵn sàng. Hãy xử lý ít nhất một tài liệu trước khi tạo Quiz.
+          </p>
           <label v-for="document in processedDocuments" :key="document.id">
             <input v-model="form.document_ids" type="checkbox" :value="document.id" />
-            <span>{{ document.original_name }}</span>
+            <span>📄 {{ document.original_name }}</span>
           </label>
         </fieldset>
+
         <p v-if="error" class="form-error">{{ error }}</p>
-        <BaseButton type="submit" :loading="submitting" :disabled="!processedDocuments.length || submitting || hasPendingGeneration">{{ hasPendingGeneration ? 'Đang tạo Quiz' : 'Tạo Quiz' }}</BaseButton>
+
+        <BaseButton
+          type="submit"
+          :loading="submitting"
+          :disabled="!processedDocuments.length || submitting || hasPendingGeneration"
+        >
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+          </svg>
+          {{ hasPendingGeneration ? 'Đang tạo Quiz bằng AI...' : 'Tạo Quiz tự động' }}
+        </BaseButton>
       </form>
     </section>
 
+    <!-- List of Quizzes -->
     <section class="content-section">
-      <header class="section-header"><div><h2>Danh sách Quiz</h2><p>Chỉ Quiz đã xuất bản mới hiển thị cho sinh viên.</p></div><span>{{ objects.length }} Quiz</span></header>
+      <header class="section-header">
+        <div>
+          <h2>Danh sách Quiz trong khóa học</h2>
+          <p>Chỉ những Quiz ở trạng thái "Đã xuất bản" mới hiển thị cho sinh viên.</p>
+        </div>
+        <span class="count-chip">{{ objects.length }} Quiz</span>
+      </header>
+
       <div v-if="objects.length" class="learning-object-list">
         <article v-for="object in objects" :key="object.id" class="learning-card">
-          <div class="learning-card__header"><strong>{{ generationLabel(object) }}</strong><span v-if="object.current_version">Phiên bản {{ object.current_version }} · {{ object.total_questions }} câu</span></div>
+          <div class="learning-card__header">
+            <span
+              class="status-chip"
+              :class="`status-chip--${object.status}`"
+            >
+              {{ generationLabel(object) }}
+            </span>
+            <span v-if="object.current_version" class="quiz-spec-tag">
+              Phiên bản {{ object.current_version }} · {{ object.total_questions }} câu
+            </span>
+          </div>
+
           <h3>{{ object.title }}</h3>
-          <p>{{ object.description || 'Chưa có mô tả.' }}</p>
-          <p v-if="object.generation?.status === 'failed'" class="form-error">{{ object.generation.error_message }}</p>
+          <p>{{ object.description || 'Chưa có mô tả chi tiết cho bài Quiz này.' }}</p>
+
+          <p v-if="object.generation?.status === 'failed'" class="form-error">
+            {{ object.generation.error_message }}
+          </p>
+
           <div class="table-actions">
-            <RouterLink v-if="object.generation?.status === 'completed' || object.quiz" class="button button--secondary" :to="{ name: 'quiz-editor', params: { courseId: course.id, objectId: object.id } }">Mở Quiz</RouterLink>
-            <BaseButton v-if="object.generation?.status === 'failed'" variant="secondary" :loading="retryingId === object.id" @click="retryGeneration(object)">Thử lại</BaseButton>
-            <BaseButton variant="danger-ghost" @click="quizToDelete = object">Xóa</BaseButton>
+            <RouterLink
+              v-if="object.generation?.status === 'completed' || object.quiz"
+              class="button button--secondary"
+              :to="{ name: 'quiz-editor', params: { courseId: course.id, objectId: object.id } }"
+            >
+              Mở chỉnh sửa Quiz
+            </RouterLink>
+            <BaseButton
+              v-if="object.generation?.status === 'failed'"
+              variant="secondary"
+              :loading="retryingId === object.id"
+              @click="retryGeneration(object)"
+            >
+              Thử lại
+            </BaseButton>
+            <BaseButton variant="danger-ghost" @click="quizToDelete = object">
+              Xóa Quiz
+            </BaseButton>
           </div>
         </article>
       </div>
-      <AppState v-else title="Chưa có Quiz" message="Tạo Quiz đầu tiên từ tài liệu của khóa học." />
+
+      <AppState
+        v-else
+        title="Chưa có Quiz nào"
+        message="Hãy sử dụng biểu mẫu phía trên để tạo bài Quiz đầu tiên từ tài liệu của khóa học."
+      />
     </section>
 
     <!-- MODAL: XÓA QUIZ -->
