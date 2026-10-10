@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\SaveCourseRequest;
 use App\Models\Course;
 use App\Models\User;
 use App\Services\RagService;
@@ -27,13 +28,9 @@ class CourseController
         return response()->json(['courses' => $courses]);
     }
 
-    public function store(Request $request): JsonResponse
+    public function store(SaveCourseRequest $request): JsonResponse
     {
-        $data = $request->validate([
-            'name' => ['required', 'string', 'max:160'],
-            'code' => ['required', 'string', 'max:50'],
-            'description' => ['nullable', 'string', 'max:2000'],
-        ]);
+        $data = $request->validated();
         $course = $request->user()->courses()->create($data);
         return response()->json(['course' => $course], 201);
     }
@@ -44,14 +41,10 @@ class CourseController
         return response()->json(['course' => $course->load('lecturer:id,name,email')]);
     }
 
-    public function update(Request $request, Course $course): JsonResponse
+    public function update(SaveCourseRequest $request, Course $course): JsonResponse
     {
         $this->ensureOwner($request, $course);
-        $data = $request->validate([
-            'name' => ['sometimes', 'required', 'string', 'max:160'],
-            'code' => ['sometimes', 'required', 'string', 'max:50'],
-            'description' => ['nullable', 'string', 'max:2000'],
-        ]);
+        $data = $request->validated();
         $course->update($data);
         return response()->json(['course' => $course]);
     }

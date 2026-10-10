@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\UploadDocumentRequest;
 use App\Models\Course;
 use App\Models\TeachingDocument;
 use App\Services\RagService;
@@ -10,6 +11,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpKernel\Exception\HttpException;
+use Throwable;
 
 class DocumentController
 {
@@ -24,27 +27,34 @@ class DocumentController
             ->get()]);
     }
 
-    public function store(Request $request, Course $course): JsonResponse
+    public function store(UploadDocumentRequest $request, Course $course): JsonResponse
     {
         $this->ensureOwner($request, $course);
-        $maxKb = (int) env('DOCUMENT_MAX_KB', 10240);
-        $request->validate(['document' => ['required', 'file', 'mimes:pdf,doc,docx', 'max:'.$maxKb]]);
         $file = $request->file('document');
         $extension = strtolower($file->getClientOriginalExtension());
         // A UUID prevents colliding or user-controlled storage paths while preserving the original name as metadata.
         $storedPath = $file->storeAs('documents/'.$course->id, Str::uuid().'.'.$extension, 'local');
+        if ($storedPath === false) {
+            throw new HttpException(503, 'Không thể lưu tài liệu. Vui lòng thử lại.');
+        }
 
-        $document = TeachingDocument::create([
-            'course_id' => $course->id,
-            'uploaded_by' => $request->user()->id,
-            'original_name' => $file->getClientOriginalName(),
-            'stored_path' => $storedPath,
-            'mime_type' => $file->getMimeType() ?: 'application/octet-stream',
-            'extension' => $extension,
-            'size_bytes' => $file->getSize(),
-            // Upload only stores source + metadata; the Lecturer explicitly starts the separate RAG queue run.
-            'processing_status' => 'uploaded_pending_processing',
-        ]);
+        try {
+            $document = TeachingDocument::create([
+                'course_id' => $course->id,
+                'uploaded_by' => $request->user()->id,
+                'original_name' => $file->getClientOriginalName(),
+                'stored_path' => $storedPath,
+                'mime_type' => $file->getMimeType() ?: 'application/octet-stream',
+                'extension' => $extension,
+                'size_bytes' => $file->getSize(),
+                // Upload only stores source + metadata; the Lecturer explicitly starts the separate RAG queue run.
+                'processing_status' => 'uploaded_pending_processing',
+            ]);
+        } catch (Throwable $exception) {
+            // Database failure must not leave an untracked upload on the HDD.
+            Storage::disk('local')->delete($storedPath);
+            throw $exception;
+        }
 
         return response()->json(['document' => $document], 201);
     }
