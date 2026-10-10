@@ -44,7 +44,7 @@ npm run build
 
 Trước khi áp dụng migration lên MySQL thật, kiểm tra mã khóa học trùng. Không dùng `migrate:fresh` trên dữ liệu nhóm. Không khởi chạy Chroma/LLM local để kiểm tra phần upload.
 
-Chưa có bằng chứng browser tương tác hoặc MySQL/Docker cho commit này khi Docker daemon chưa hoạt động. Frontend build chỉ chứng minh component biên dịch được, không thay thế việc thử kéo thả/bấm nút trong trình duyệt.
+Bản kiểm tra ban đầu chạy native khi Docker daemon chưa hoạt động. Bằng chứng Docker/MySQL và browser bổ sung nằm ở mục dưới.
 
 ## Kết quả đã chạy
 
@@ -55,3 +55,19 @@ Chưa có bằng chứng browser tương tác hoặc MySQL/Docker cho commit nà
 - `git diff --check`: passed.
 
 Giải thích bình dân: Form Request là cửa kiểm tra trước khi dữ liệu vào controller. Mã môn có khóa chống trùng trong database. Tài liệu được đổi tên ngẫu nhiên khi lưu để hai file cùng tên không đè lên nhau; nếu ghi database thất bại, file vừa tải sẽ được dọn. Khung kéo thả nay cho xem tên và dung lượng trước khi gửi.
+
+## Xác minh trực tiếp Docker, MySQL và browser — 10/10/2026
+
+- Docker Desktop/Engine đã khởi động được, Engine **29.1.3**. File socket Windows cũ làm Desktop lỗi startup; giữ nguyên bản sao thư mục runtime socket trước khi tạo lại. Không factory reset, prune, xóa volume hay đổi dữ liệu dự án.
+- Chạy `docker compose up --build -d mysql mailpit api web`; MySQL và API healthy. Không khởi động AI, Chroma hoặc queue worker trong task kiểm tra upload.
+- Lệnh đúng trong ảnh `docker compose exec -T api php vendor/bin/phpunit tests/Feature/CourseAndDocumentTest.php`: **10 tests, 55 assertions passed**, PHP 8.4.26.
+- Toàn bộ PHPUnit trong API container: **46 tests, 283 assertions passed**, 52.50 MB. PHPUnit dùng SQLite in-memory để không xóa dữ liệu demo.
+- Kiểm tra riêng MySQL thật: cả 23 migration có trạng thái Ran; index chống trùng mã môn và hai composite index mới hiện trong `SHOW INDEX`.
+- `http://localhost:8080/api/health`: HTTP 200, `status=ok` qua Nginx proxy.
+- Browser: tạo khóa `VUONG-SMOKE-1010`, ID 2; trang chi tiết mở thành công. Chọn `upload-check.pdf` hiển thị tên, 235 B và nút tải lên trước khi gửi. Bấm tải lên thành công, bảng hiển thị MIME `application/pdf`, dung lượng và `Chờ xử lý`.
+- MySQL xác nhận document ID 1 thuộc khóa ID 2, `uploaded_pending_processing`; file thực tồn tại trên disk local của container.
+- Browser chọn file thử `.exe` vô hại: thông báo từ chối PDF/DOC/DOCX, không xuất hiện nút tải lên. Các ca quá dung lượng được xác minh bởi PHPUnit; chưa thử file 10 MB qua browser hoặc thao tác kéo thả bằng con trỏ.
+- Giữ lại khóa học/PDF kiểm thử để người dùng mở xem. Không gọi AI xử lý PDF kiểm thử.
+- Frontend Dockerfile chuyển sang `npm ci` với lockfile, thêm `.dockerignore` để tránh đưa `node_modules` Windows, `dist` và `.env` vào image. Image frontend đã build lại và container đã recreate với thay đổi này.
+
+Giải thích bình dân: Docker nay chạy được thật; trình duyệt gửi file qua frontend, Laravel ghi vào MySQL và ổ lưu trữ của container. Việc sửa Dockerfile giúp máy các thành viên dùng cùng danh sách thư viện thay vì tự lấy phiên bản khác nhau.
