@@ -290,3 +290,13 @@ Khi **Codex** tiếp nhận công việc, hãy chú ý các định hướng ti�
 - Đã redaction Gemini key thật bị ghi trong `docs/SPRINT_2_EXECUTION_PLAN.md` từ lịch sử trước; cần rotate key vì xóa khỏi working tree không xóa secret khỏi Git history.
 - Chưa làm: Mindmap, Slides, persistent spaced repetition, analytics, restore version. Xem `docs/SPRINT_4_PHASE1_EVIDENCE.md` và Section 7 của `docs/SPRINT_4_EXECUTION_PLAN.md`.
 
+## 16. Codex handoff — Sprint 4 Mindmap & Interactive Slides (16/10/2026)
+
+- Branch làm việc: `feature/sprint4-mindmap-and-slides`, bắt đầu từ `main@e594a9d`. Không push trực tiếp `main`.
+- Đã triển khai PB26/US-17 và PB27/US-18 end-to-end: FastAPI endpoints/schema/prompt/citation mapping; Laravel owner-only routes, queue jobs, retry, version, publish/archive; Background Task Center; Vue Lecturer editor/viewer; Student learning hub/viewer.
+- File chính mới: `GenerateMindmapLearningObject.php`, `GenerateSlideLearningObject.php`, `MindmapViewer.vue`, `MindmapNodeEditor.vue`, `SlidePlayer.vue`, `MindmapEditorView.vue`, `SlideEditorView.vue`, `StudentMindmapView.vue`, `StudentSlideView.vue`, hai Pytest file và `SprintFourMindmapSlideApiTest.php`.
+- Mindmap chỉ cho Lecturer sửa label. Backend ghép label mới với cấu trúc/citation từ snapshot cũ để chống giả nguồn. Slide cho sửa nội dung và notes nhưng cũng giữ citation server-side. Student API xóa speaker notes.
+- E2E thật: Mindmap LO 11, Slide LO 12, Course 4/Document 5; cả hai `published` và Student xem được. Mindmap attempt 4 mới thành công sau một Gemini 503 và một recursive output có null child; Slide attempt 2 thành công. Đây là evidence hữu ích cho queue/retry, không được xóa lịch sử run.
+- Đã kiểm tra: PHPUnit 47/47 (314 assertions), Pytest 33/33, Vite build 98 modules, đủ 8 container Up, Chroma 645 vectors.
+- Phần chưa làm vẫn gồm persistent spaced repetition, analytics, restore version, export Mindmap/Slides, media-rich slides và báo cáo/PR governance. Xem `docs/SPRINT_4_MINDMAP_SLIDES_EVIDENCE.md`.
+

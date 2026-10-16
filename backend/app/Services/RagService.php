@@ -82,6 +82,32 @@ class RagService
         ]), 'flashcard generation');
     }
 
+    public function generateMindmap(Course $course, array $parameters): array
+    {
+        return $this->unwrap($this->client(120)->asJson()->post('/internal/v1/learning-objects/generate-mindmap', [
+            'course_id' => $course->id,
+            'topic' => $parameters['topic'],
+            'difficulty' => $parameters['difficulty'],
+            'depth' => $parameters['depth'],
+            'document_ids' => array_values($parameters['document_ids'] ?? []),
+            'top_k' => $parameters['top_k'],
+            'max_pages' => $parameters['max_pages'],
+        ]), 'mindmap generation');
+    }
+
+    public function generateSlides(Course $course, array $parameters): array
+    {
+        return $this->unwrap($this->client(120)->asJson()->post('/internal/v1/learning-objects/generate-slides', [
+            'course_id' => $course->id,
+            'topic' => $parameters['topic'],
+            'difficulty' => $parameters['difficulty'],
+            'slide_count' => $parameters['slide_count'],
+            'document_ids' => array_values($parameters['document_ids'] ?? []),
+            'top_k' => $parameters['top_k'],
+            'max_pages' => $parameters['max_pages'],
+        ]), 'slide generation');
+    }
+
     public function deleteDocumentVectors(TeachingDocument $document): void
     {
         $this->unwrap($this->client()->delete('/internal/v1/documents/'.$document->id.'/vectors'), 'vector cleanup');

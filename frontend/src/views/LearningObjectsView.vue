@@ -16,7 +16,8 @@ const router = useRouter()
 const course = ref(null)
 const documents = ref([])
 const objects = ref([])
-const activeType = ref(route.query.type === 'flashcard' ? 'flashcard' : 'quiz')
+const supportedTypes = ['quiz', 'flashcard', 'mindmap', 'slide']
+const activeType = ref(supportedTypes.includes(route.query.type) ? route.query.type : 'quiz')
 const loading = ref(true)
 const submitting = ref(false)
 const retryingId = ref(null)
@@ -28,6 +29,10 @@ let pollTimer = null
 
 const quizForm = reactive({ title: '', topic: '', difficulty: 'medium', question_count: 5, top_k: 8, passing_score: 60, time_limit_minutes: null, document_ids: [] })
 const flashcardForm = reactive({ title: '', topic: '', difficulty: 'medium', card_count: 8, top_k: 10, max_pages: 5, document_ids: [] })
+const mindmapForm = reactive({ title: '', topic: '', difficulty: 'medium', depth: 3, top_k: 10, max_pages: 5, document_ids: [] })
+const slideForm = reactive({ title: '', topic: '', difficulty: 'medium', slide_count: 6, top_k: 10, max_pages: 5, document_ids: [] })
+const forms = { quiz: quizForm, flashcard: flashcardForm, mindmap: mindmapForm, slide: slideForm }
+const activeForm = computed(() => forms[activeType.value])
 const processedDocuments = computed(() => documents.value.filter((document) => document.processing_status === 'processed'))
 const visibleObjects = computed(() => objects.value.filter((object) => object.type === activeType.value))
 const hasPendingGeneration = computed(() => objects.value.some((object) => ['queued', 'generating'].includes(object.generation?.status)))
@@ -40,7 +45,7 @@ function switchType(type) {
 watch(
   () => route.query.type,
   (newType) => {
-    if (newType && ['quiz', 'flashcard'].includes(newType) && newType !== activeType.value) {
+    if (newType && supportedTypes.includes(newType) && newType !== activeType.value) {
       activeType.value = newType
     }
   }
@@ -52,9 +57,10 @@ function canOpenEditor(object) {
   return true
 }
 
-function typeLabel(type) { return type === 'flashcard' ? 'Flashcard' : 'Quiz' }
+function typeLabel(type) { return ({ quiz: 'Quiz', flashcard: 'Flashcard', mindmap: 'Mindmap', slide: 'Slide' })[type] || 'Học liệu' }
 function editorRoute(object) {
-  return { name: object.type === 'flashcard' ? 'flashcard-editor' : 'quiz-editor', params: { courseId: course.value.id, objectId: object.id } }
+  const names = { quiz: 'quiz-editor', flashcard: 'flashcard-editor', mindmap: 'mindmap-editor', slide: 'slide-editor' }
+  return { name: names[object.type], params: { courseId: course.value.id, objectId: object.id } }
 }
 function generationLabel(object) {
   const status = object.generation?.status
@@ -112,21 +118,26 @@ function generationPayload(form, type) {
     document_ids: form.document_ids.map(Number),
     request_id: crypto.randomUUID(),
   }
-  return type === 'flashcard'
-    ? { ...common, card_count: Number(form.card_count), max_pages: Number(form.max_pages) }
-    : { ...common, question_count: Number(form.question_count), passing_score: Number(form.passing_score), time_limit_minutes: form.time_limit_minutes ? Number(form.time_limit_minutes) : null }
+  if (type === 'flashcard') return { ...common, card_count: Number(form.card_count), max_pages: Number(form.max_pages) }
+  if (type === 'mindmap') return { ...common, depth: Number(form.depth), max_pages: Number(form.max_pages) }
+  if (type === 'slide') return { ...common, slide_count: Number(form.slide_count), max_pages: Number(form.max_pages) }
+  return { ...common, question_count: Number(form.question_count), passing_score: Number(form.passing_score), time_limit_minutes: form.time_limit_minutes ? Number(form.time_limit_minutes) : null }
 }
 
 async function generate() {
-  const form = activeType.value === 'flashcard' ? flashcardForm : quizForm
+  const form = activeForm.value
   error.value = ''
   if (form.topic.trim().length < 3) { error.value = 'Chủ đề cần có ít nhất 3 ký tự.'; return }
   submitting.value = true
   try {
     const payload = generationPayload(form, activeType.value)
-    const result = activeType.value === 'flashcard'
-      ? await learningObjectService.generateFlashcards(route.params.courseId, payload)
-      : await learningObjectService.generateQuiz(route.params.courseId, payload)
+    const generators = {
+      quiz: learningObjectService.generateQuiz,
+      flashcard: learningObjectService.generateFlashcards,
+      mindmap: learningObjectService.generateMindmap,
+      slide: learningObjectService.generateSlides,
+    }
+    const result = await generators[activeType.value](route.params.courseId, payload)
     activeObjectId.value = result.learning_object.id
     objects.value.unshift(result.learning_object)
     toast.show(`Yêu cầu tạo ${typeLabel(activeType.value)} đã được đưa vào hàng đợi. Bạn có thể chuyển trang trong khi hệ thống xử lý.`)
@@ -178,6 +189,8 @@ onBeforeUnmount(() => window.clearInterval(pollTimer))
     <div class="learning-tabs" role="tablist" aria-label="Loại học liệu">
       <button :class="{ active: activeType === 'quiz' }" role="tab" @click="switchType('quiz')">Quiz trắc nghiệm</button>
       <button :class="{ active: activeType === 'flashcard' }" role="tab" @click="switchType('flashcard')">Flashcard ôn tập</button>
+      <button :class="{ active: activeType === 'mindmap' }" role="tab" @click="switchType('mindmap')">Sơ đồ tư duy</button>
+      <button :class="{ active: activeType === 'slide' }" role="tab" @click="switchType('slide')">Slide bài giảng</button>
     </div>
 
     <section class="learning-panel">
@@ -192,7 +205,7 @@ onBeforeUnmount(() => window.clearInterval(pollTimer))
           <label class="field"><span class="field__label">Điểm đạt (%)</span><input v-model.number="quizForm.passing_score" type="number" min="0" max="100" /></label>
           <label class="field"><span class="field__label">Thời gian (phút)</span><input v-model.number="quizForm.time_limit_minutes" type="number" min="1" max="480" placeholder="Không giới hạn" /></label>
         </template>
-        <template v-else>
+        <template v-else-if="activeType === 'flashcard'">
           <BaseInput v-model="flashcardForm.title" label="Tiêu đề (không bắt buộc)" placeholder="Ví dụ: Khái niệm Đại số tuyến tính" />
           <BaseInput v-model="flashcardForm.topic" label="Chủ đề" placeholder="Ví dụ: Không gian vector và cơ sở" required />
           <label class="field"><span class="field__label">Độ khó</span><select v-model="flashcardForm.difficulty"><option value="easy">Dễ</option><option value="medium">Trung bình</option><option value="hard">Khó</option></select></label>
@@ -200,13 +213,28 @@ onBeforeUnmount(() => window.clearInterval(pollTimer))
           <label class="field"><span class="field__label">Số đoạn nguồn</span><input v-model.number="flashcardForm.top_k" type="number" min="3" max="15" /></label>
           <label class="field"><span class="field__label">Số trang nguồn tối đa</span><input v-model.number="flashcardForm.max_pages" type="number" min="1" max="10" /></label>
         </template>
+        <template v-else-if="activeType === 'mindmap'">
+          <BaseInput v-model="mindmapForm.title" label="Tiêu đề (không bắt buộc)" placeholder="Ví dụ: Sơ đồ Không gian vector" />
+          <BaseInput v-model="mindmapForm.topic" label="Chủ đề" placeholder="Ví dụ: Không gian vector và cơ sở" required />
+          <label class="field"><span class="field__label">Độ khó</span><select v-model="mindmapForm.difficulty"><option value="easy">Dễ</option><option value="medium">Trung bình</option><option value="hard">Khó</option></select></label>
+          <label class="field"><span class="field__label">Độ sâu sơ đồ</span><input v-model.number="mindmapForm.depth" type="number" min="2" max="4" /></label>
+          <label class="field"><span class="field__label">Số đoạn nguồn</span><input v-model.number="mindmapForm.top_k" type="number" min="3" max="15" /></label>
+          <label class="field"><span class="field__label">Số trang nguồn tối đa</span><input v-model.number="mindmapForm.max_pages" type="number" min="1" max="10" /></label>
+        </template>
+        <template v-else>
+          <BaseInput v-model="slideForm.title" label="Tiêu đề (không bắt buộc)" placeholder="Ví dụ: Bài giảng Không gian vector" />
+          <BaseInput v-model="slideForm.topic" label="Chủ đề" placeholder="Ví dụ: Không gian vector và cơ sở" required />
+          <label class="field"><span class="field__label">Độ khó</span><select v-model="slideForm.difficulty"><option value="easy">Dễ</option><option value="medium">Trung bình</option><option value="hard">Khó</option></select></label>
+          <label class="field"><span class="field__label">Số slide</span><input v-model.number="slideForm.slide_count" type="number" min="5" max="10" /></label>
+          <label class="field"><span class="field__label">Số đoạn nguồn</span><input v-model.number="slideForm.top_k" type="number" min="3" max="15" /></label>
+          <label class="field"><span class="field__label">Số trang nguồn tối đa</span><input v-model.number="slideForm.max_pages" type="number" min="1" max="10" /></label>
+        </template>
 
         <fieldset class="document-picker">
           <legend>Tài liệu nguồn</legend>
           <p v-if="!processedDocuments.length" class="muted">Chưa có tài liệu sẵn sàng. Hãy xử lý ít nhất một tài liệu trước.</p>
           <label v-for="document in processedDocuments" :key="document.id">
-            <input v-if="activeType === 'quiz'" v-model="quizForm.document_ids" type="checkbox" :value="document.id" />
-            <input v-else v-model="flashcardForm.document_ids" type="checkbox" :value="document.id" />
+            <input v-model="activeForm.document_ids" type="checkbox" :value="document.id" />
             <span>{{ document.original_name }}</span>
           </label>
         </fieldset>
@@ -221,7 +249,7 @@ onBeforeUnmount(() => window.clearInterval(pollTimer))
       <header class="section-header"><div><h2>{{ typeLabel(activeType) }} trong khóa học</h2><p>Chỉ học liệu đã xuất bản mới hiển thị cho sinh viên.</p></div><span class="count-chip">{{ visibleObjects.length }} mục</span></header>
       <div v-if="visibleObjects.length" class="learning-object-list">
         <article v-for="object in visibleObjects" :key="object.id" class="learning-card">
-          <div class="learning-card__header"><span class="status-chip" :class="`status-chip--${object.status}`">{{ generationLabel(object) }}</span><span v-if="object.current_version" class="object-spec">Phiên bản {{ object.current_version }} · {{ object.type === 'flashcard' ? `${object.total_cards} thẻ` : `${object.total_questions} câu` }}</span></div>
+          <div class="learning-card__header"><span class="status-chip" :class="`status-chip--${object.status}`">{{ generationLabel(object) }}</span><span v-if="object.current_version" class="object-spec">Phiên bản {{ object.current_version }} · {{ object.type === 'flashcard' ? `${object.total_cards} thẻ` : object.type === 'mindmap' ? `${object.total_nodes} nút` : object.type === 'slide' ? `${object.total_slides} slide` : `${object.total_questions} câu` }}</span></div>
           <h3>{{ object.title }}</h3><p>{{ object.description || `Chưa có mô tả cho ${typeLabel(object.type)} này.` }}</p>
           <p v-if="object.generation?.status === 'failed'" class="form-error">{{ object.generation.error_message }}</p>
           <div class="table-actions">

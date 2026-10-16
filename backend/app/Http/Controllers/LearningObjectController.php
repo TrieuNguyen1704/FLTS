@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Jobs\GenerateFlashcardLearningObject;
+use App\Jobs\GenerateMindmapLearningObject;
 use App\Jobs\GenerateQuizLearningObject;
+use App\Jobs\GenerateSlideLearningObject;
 use App\Models\Course;
 use App\Models\LearningObject;
 use App\Models\LearningObjectGenerationRun;
@@ -147,6 +149,16 @@ class LearningObjectController
         return response()->json(['learning_object' => $this->detail($learningObject->fresh())], 202);
     }
 
+    public function storeMindmap(Request $request, Course $course): JsonResponse
+    {
+        return $this->storeVersionedLearningObject($request, $course, 'mindmap');
+    }
+
+    public function storeSlides(Request $request, Course $course): JsonResponse
+    {
+        return $this->storeVersionedLearningObject($request, $course, 'slide');
+    }
+
     public function retryGeneration(Request $request, Course $course, LearningObject $learningObject): JsonResponse
     {
         $this->ensureObjectCourse($course, $learningObject);
@@ -185,6 +197,12 @@ class LearningObjectController
         abort_unless($learningObject->status === 'draft', 422, 'Only draft learning objects can be edited.');
         if ($learningObject->type === 'flashcard') {
             return $this->updateFlashcards($request, $learningObject);
+        }
+        if ($learningObject->type === 'mindmap') {
+            return $this->updateMindmap($request, $learningObject);
+        }
+        if ($learningObject->type === 'slide') {
+            return $this->updateSlides($request, $learningObject);
         }
         abort_unless($learningObject->type === 'quiz', 422, 'This learning-object type is not editable yet.');
         $data = $request->validate([
@@ -239,6 +257,21 @@ class LearningObjectController
             }
             $learningObject->update(['status' => 'published', 'published_at' => now()]);
             return response()->json(['learning_object' => $this->detail($learningObject->fresh()), 'message' => 'Flashcards published.']);
+        }
+        if ($learningObject->type === 'mindmap') {
+            $root = $learningObject->versions()->latest('version_number')->firstOrFail()->content_payload['root'] ?? null;
+            abort_unless(is_array($root) && count($root['children'] ?? []) >= 2 && $this->mindmapIsGrounded($root), 422, 'A published Mindmap requires grounded content and at least two main branches.');
+            $learningObject->update(['status' => 'published', 'published_at' => now()]);
+            return response()->json(['learning_object' => $this->detail($learningObject->fresh()), 'message' => 'Mindmap published.']);
+        }
+        if ($learningObject->type === 'slide') {
+            $slides = $learningObject->versions()->latest('version_number')->firstOrFail()->content_payload['slides'] ?? [];
+            abort_unless(count($slides) >= 5, 422, 'A published slide deck requires at least five slides.');
+            foreach ($slides as $slide) {
+                abort_unless(!empty($slide['title']) && count($slide['bullet_points'] ?? []) >= 3 && !empty($slide['speaker_notes']) && !empty($slide['citations']), 422, 'Every slide requires content, speaker notes, and grounded citations.');
+            }
+            $learningObject->update(['status' => 'published', 'published_at' => now()]);
+            return response()->json(['learning_object' => $this->detail($learningObject->fresh()), 'message' => 'Slides published.']);
         }
         abort_unless($learningObject->type === 'quiz', 422, 'This learning-object type cannot be published yet.');
         $quiz = $learningObject->quiz()->with('questions.options')->firstOrFail();
@@ -323,6 +356,8 @@ class LearningObjectController
             'published_at' => $object->published_at, 'created_at' => $object->created_at,
             'creator' => $object->creator, 'total_questions' => $object->quiz?->total_questions,
             'total_cards' => $object->type === 'flashcard' ? count($latestPayload['cards'] ?? []) : null,
+            'total_nodes' => $object->type === 'mindmap' ? $this->countMindmapNodes($latestPayload['root'] ?? null) : null,
+            'total_slides' => $object->type === 'slide' ? count($latestPayload['slides'] ?? []) : null,
             'current_version' => (int) ($object->versions_max_version_number ?? $object->versions()->max('version_number')),
             'generation' => $this->generationSummary($object->latestGenerationRun ?? $object->generationRuns()->latest('attempt_number')->first()),
         ];
@@ -363,6 +398,12 @@ class LearningObjectController
         ] : null;
         $data['flashcard'] = $object->type === 'flashcard' && $object->latestVersion
             ? $object->latestVersion->content_payload
+            : null;
+        $data['mindmap'] = $object->type === 'mindmap' && $object->latestVersion
+            ? $object->latestVersion->content_payload
+            : null;
+        $data['slides'] = $object->type === 'slide' && $object->latestVersion
+            ? $this->slidePayload($object->latestVersion->content_payload, $studentView)
             : null;
         return $data;
     }
@@ -406,11 +447,147 @@ class LearningObjectController
 
     private function dispatchGeneration(LearningObject $learningObject, LearningObjectGenerationRun $run): void
     {
-        if ($learningObject->type === 'flashcard') {
-            GenerateFlashcardLearningObject::dispatch($run->id);
-            return;
+        match ($learningObject->type) {
+            'flashcard' => GenerateFlashcardLearningObject::dispatch($run->id),
+            'mindmap' => GenerateMindmapLearningObject::dispatch($run->id),
+            'slide' => GenerateSlideLearningObject::dispatch($run->id),
+            default => GenerateQuizLearningObject::dispatch($run->id),
+        };
+    }
+
+    private function storeVersionedLearningObject(Request $request, Course $course, string $type): JsonResponse
+    {
+        $this->ensureOwner($request, $course);
+        $typeRules = $type === 'mindmap'
+            ? ['depth' => ['required', 'integer', 'min:2', 'max:4']]
+            : ['slide_count' => ['required', 'integer', 'min:5', 'max:10']];
+        $data = $request->validate(array_merge([
+            'title' => ['nullable', 'string', 'max:255'], 'description' => ['nullable', 'string', 'max:2000'],
+            'topic' => ['required', 'string', 'min:3', 'max:500'], 'difficulty' => ['required', 'in:easy,medium,hard'],
+            'document_ids' => ['nullable', 'array', 'max:50'], 'document_ids.*' => ['integer'],
+            'top_k' => ['nullable', 'integer', 'min:3', 'max:15'], 'max_pages' => ['nullable', 'integer', 'min:1', 'max:10'],
+            'request_id' => ['required', 'uuid'],
+        ], $typeRules));
+        $documentIds = array_values(array_unique($data['document_ids'] ?? []));
+        if ($documentIds !== [] && $course->documents()->whereIn('id', $documentIds)->where('processing_status', 'processed')->count() !== count($documentIds)) {
+            return response()->json(['message' => 'Every selected document must belong to this course and be processed.'], 422);
         }
-        GenerateQuizLearningObject::dispatch($run->id);
+        $existingRun = LearningObjectGenerationRun::with('learningObject')->where('request_id', $data['request_id'])->first();
+        if ($existingRun) {
+            abort_unless($existingRun->learningObject->course_id === $course->id && $existingRun->learningObject->created_by === $request->user()->id, 409);
+            return response()->json(['learning_object' => $this->detail($existingRun->learningObject)], 202);
+        }
+        $parameters = [
+            'topic' => $data['topic'], 'difficulty' => $data['difficulty'], 'document_ids' => $documentIds,
+            'top_k' => $data['top_k'] ?? 10, 'max_pages' => $data['max_pages'] ?? 5,
+            'requested_title' => $data['title'] ?? null, 'requested_description' => $data['description'] ?? null,
+        ];
+        $parameters[$type === 'mindmap' ? 'depth' : 'slide_count'] = $data[$type === 'mindmap' ? 'depth' : 'slide_count'];
+        [$object, $run] = DB::transaction(function () use ($request, $course, $data, $parameters, $type) {
+            $label = $type === 'mindmap' ? 'Mindmap' : 'Slides';
+            $object = LearningObject::create([
+                'course_id' => $course->id, 'type' => $type, 'title' => ($data['title'] ?? null) ?: $label.': '.$data['topic'],
+                'description' => $data['description'] ?? null, 'status' => 'draft', 'created_by' => $request->user()->id,
+            ]);
+            $run = $object->generationRuns()->create(['request_id' => $data['request_id'], 'attempt_number' => 1, 'status' => 'queued', 'generation_params' => $parameters]);
+            return [$object, $run];
+        });
+        $this->dispatchGeneration($object, $run);
+        return response()->json(['learning_object' => $this->detail($object->fresh())], 202);
+    }
+
+    private function updateMindmap(Request $request, LearningObject $learningObject): JsonResponse
+    {
+        $data = $request->validate([
+            'title' => ['required', 'string', 'max:255'], 'description' => ['nullable', 'string', 'max:2000'],
+            'root' => ['required', 'array'], 'root.id' => ['required', 'string'], 'root.label' => ['required', 'string', 'max:500'],
+            'root.children' => ['required', 'array', 'min:2'],
+        ]);
+        $previous = $learningObject->versions()->latest('version_number')->firstOrFail();
+        $root = $this->mergeMindmapLabels($data['root'], $previous->content_payload['root']);
+        DB::transaction(function () use ($request, $learningObject, $data, $previous, $root) {
+            $learningObject->update(['title' => $data['title'], 'description' => $data['description'] ?? null]);
+            $learningObject->versions()->create([
+                'version_number' => $previous->version_number + 1,
+                'content_payload' => ['root' => $root, 'markdown' => $this->mindmapMarkdown($root)],
+                'generation_params' => $previous->generation_params ?? [], 'created_by' => $request->user()->id,
+            ]);
+        });
+        return response()->json(['learning_object' => $this->detail($learningObject->fresh())]);
+    }
+
+    private function updateSlides(Request $request, LearningObject $learningObject): JsonResponse
+    {
+        $data = $request->validate([
+            'title' => ['required', 'string', 'max:255'], 'description' => ['nullable', 'string', 'max:2000'],
+            'slides' => ['required', 'array', 'min:5', 'max:10'], 'slides.*.slide_number' => ['required', 'integer', 'min:1'],
+            'slides.*.title' => ['required', 'string', 'max:500'], 'slides.*.layout' => ['required', 'in:title,bullet_points,summary'],
+            'slides.*.bullet_points' => ['required', 'array', 'min:3', 'max:5'], 'slides.*.bullet_points.*' => ['required', 'string', 'max:1000'],
+            'slides.*.speaker_notes' => ['required', 'string', 'max:4000'],
+        ]);
+        $previous = $learningObject->versions()->latest('version_number')->firstOrFail();
+        $previousSlides = collect($previous->content_payload['slides'] ?? [])->keyBy('slide_number');
+        $slides = collect($data['slides'])->values()->map(function (array $slide, int $index) use ($previousSlides) {
+            $old = $previousSlides->get($slide['slide_number']);
+            abort_unless($old, 422, 'Slide structure cannot be replaced during editing.');
+            return [
+                'slide_number' => $index + 1, 'title' => $slide['title'], 'layout' => $slide['layout'],
+                'bullet_points' => array_values($slide['bullet_points']), 'speaker_notes' => $slide['speaker_notes'],
+                'citations' => array_values($old['citations'] ?? []),
+            ];
+        })->all();
+        DB::transaction(function () use ($request, $learningObject, $data, $previous, $slides) {
+            $learningObject->update(['title' => $data['title'], 'description' => $data['description'] ?? null]);
+            $learningObject->versions()->create([
+                'version_number' => $previous->version_number + 1, 'content_payload' => ['slides' => $slides],
+                'generation_params' => $previous->generation_params ?? [], 'created_by' => $request->user()->id,
+            ]);
+        });
+        return response()->json(['learning_object' => $this->detail($learningObject->fresh())]);
+    }
+
+    private function mergeMindmapLabels(array $submitted, array $original): array
+    {
+        abort_unless(($submitted['id'] ?? null) === ($original['id'] ?? null), 422, 'Mindmap structure cannot be replaced during editing.');
+        $submittedChildren = array_values($submitted['children'] ?? []);
+        $originalChildren = array_values($original['children'] ?? []);
+        abort_unless(count($submittedChildren) === count($originalChildren), 422, 'Mindmap structure cannot be replaced during editing.');
+        $label = trim((string) ($submitted['label'] ?? ''));
+        abort_unless($label !== '' && mb_strlen($label) <= 500, 422, 'Every mindmap node requires a valid label.');
+        return [
+            'id' => $original['id'], 'label' => $label, 'citations' => array_values($original['citations'] ?? []),
+            'children' => array_map(fn ($child, $index) => $this->mergeMindmapLabels($child, $originalChildren[$index]), $submittedChildren, array_keys($submittedChildren)),
+        ];
+    }
+
+    private function mindmapMarkdown(array $node, int $level = 1): string
+    {
+        $lines = [str_repeat('#', min($level, 6)).' '.$node['label']];
+        foreach ($node['children'] ?? [] as $child) $lines[] = $this->mindmapMarkdown($child, $level + 1);
+        return implode("\n", $lines);
+    }
+
+    private function mindmapIsGrounded(array $node): bool
+    {
+        if (empty($node['label']) || empty($node['citations'])) return false;
+        foreach ($node['children'] ?? [] as $child) if (!$this->mindmapIsGrounded($child)) return false;
+        return true;
+    }
+
+    private function countMindmapNodes(?array $node): int
+    {
+        if (!$node) return 0;
+        return 1 + array_sum(array_map(fn ($child) => $this->countMindmapNodes($child), $node['children'] ?? []));
+    }
+
+    private function slidePayload(array $payload, bool $studentView): array
+    {
+        if (!$studentView) return $payload;
+        $payload['slides'] = array_map(function (array $slide) {
+            unset($slide['speaker_notes']);
+            return $slide;
+        }, $payload['slides'] ?? []);
+        return $payload;
     }
 
     private function generationSummary(?LearningObjectGenerationRun $run): ?array

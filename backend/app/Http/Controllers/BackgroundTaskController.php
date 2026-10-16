@@ -72,19 +72,26 @@ class BackgroundTaskController
                 $status = $run->status;
                 $isActive = in_array($status, ['queued', 'generating'], true);
 
-                $isFlashcard = $lo?->type === 'flashcard';
-                $objectLabel = $isFlashcard ? 'Flashcard' : 'Quiz';
+                $objectType = $lo?->type ?? 'quiz';
+                $objectLabel = ['quiz' => 'Quiz', 'flashcard' => 'Flashcard', 'mindmap' => 'Mindmap', 'slide' => 'Slide'][$objectType] ?? 'Learning object';
+                $generationLabels = [
+                    'quiz' => 'Đang phân tích tài liệu và sinh câu hỏi',
+                    'flashcard' => 'Đang tạo bộ thẻ ghi nhớ',
+                    'mindmap' => 'Đang xây dựng sơ đồ kiến thức',
+                    'slide' => 'Đang biên soạn bài giảng',
+                ];
+                $editorPaths = ['quiz' => 'learning-objects', 'flashcard' => 'flashcards', 'mindmap' => 'mindmaps', 'slide' => 'slides'];
                 $stageLabels = [
                     'queued' => 'Đang chờ trong hàng đợi',
-                    'generating' => $isFlashcard ? 'Đang tạo bộ thẻ ghi nhớ' : 'Đang phân tích tài liệu và sinh câu hỏi',
+                    'generating' => $generationLabels[$objectType] ?? 'Đang tạo học liệu',
                     'completed' => "Đã tạo {$objectLabel} thành công",
                     'failed' => "Tạo {$objectLabel} thất bại",
                 ];
 
                 return [
-                    'id' => ($isFlashcard ? 'flashcard_' : 'quiz_').$run->id,
+                    'id' => $objectType.'_'.$run->id,
                     'raw_id' => $run->id,
-                    'type' => $isFlashcard ? 'flashcard_generation' : 'quiz_generation',
+                    'type' => $objectType.'_generation',
                     'course_id' => $course?->id,
                     'course_name' => $course?->name,
                     'course_code' => $course?->code,
@@ -99,13 +106,11 @@ class BackgroundTaskController
                     'created_at' => $run->created_at?->toISOString(),
                     'error_message' => $run->error_message,
                     'retryable' => $status === 'failed' && $lo
-                        && ($isFlashcard ? !$lo->latestVersion : !$lo->quiz),
+                        && ($objectType === 'quiz' ? !$lo->quiz : !$lo->latestVersion),
                     'target_url' => $course
                         ? ($status === 'completed' && $lo
-                            ? ($isFlashcard
-                                ? "/lecturer/courses/{$course->id}/flashcards/{$lo->id}"
-                                : "/lecturer/courses/{$course->id}/learning-objects/{$lo->id}")
-                            : "/lecturer/courses/{$course->id}/learning-objects?type=" . ($isFlashcard ? 'flashcard' : 'quiz'))
+                            ? "/lecturer/courses/{$course->id}/{$editorPaths[$objectType]}/{$lo->id}"
+                            : "/lecturer/courses/{$course->id}/learning-objects?type={$objectType}")
                         : null,
                 ];
             });
