@@ -19,6 +19,7 @@ class LearningObject extends Model
     public function course(): BelongsTo { return $this->belongsTo(Course::class); }
     public function creator(): BelongsTo { return $this->belongsTo(User::class, 'created_by'); }
     public function versions(): HasMany { return $this->hasMany(LearningObjectVersion::class); }
+    public function latestVersion(): HasOne { return $this->hasOne(LearningObjectVersion::class)->latestOfMany(); }
     public function quiz(): HasOne { return $this->hasOne(Quiz::class); }
     public function generationRuns(): HasMany { return $this->hasMany(LearningObjectGenerationRun::class); }
     public function latestGenerationRun(): HasOne { return $this->hasOne(LearningObjectGenerationRun::class)->latestOfMany(); }

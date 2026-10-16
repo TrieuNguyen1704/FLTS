@@ -109,8 +109,8 @@ async function retryTask(task) {
   try {
     if (task.type === 'document_processing') {
       await taskService.retryDocumentTask(task.course_id, task.resource_id)
-    } else if (task.type === 'quiz_generation') {
-      await taskService.retryQuizTask(task.course_id, task.resource_id)
+    } else if (['quiz_generation', 'flashcard_generation'].includes(task.type)) {
+      await taskService.retryGenerationTask(task.course_id, task.resource_id)
     }
     toast.show(`Đã gửi lại yêu cầu xử lý cho "${task.title}".`, 'success')
     // Remove from notified map so retry completion can trigger toast

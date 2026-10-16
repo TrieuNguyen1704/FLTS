@@ -278,3 +278,15 @@ Khi **Codex** tiếp nhận công việc, hãy chú ý các định hướng ti�
   - ChromaDB: **551 vectors nguyên vẹn 100%**.
   - Docker Compose: Toàn bộ 8 services Up & Healthy.
 
+## 15. Codex Sprint 4 Phase 1 Flashcard handoff — 16/10/2026
+
+- Nhánh làm việc: `feature/sprint4-flashcard-vertical-slice`, base `4698773`; không push trực tiếp `main`.
+- Đã triển khai PB25/US-16 carry-over: migration enum, FastAPI structured generation/citation mapping/`max_pages`, Laravel queue job/API/version/publish/RBAC, Vue Lecturer editor/preview + Student player.
+- File entry points: `GenerateFlashcardLearningObject.php`, `LearningObjectController@storeFlashcards/updateFlashcards`, `RagService::generateFlashcards`, `ai-service/main.py::generate_flashcards`, `LearningObjectsView.vue`, `FlashcardEditorView.vue`, `FlashcardPlayer.vue`, `StudentFlashcardView.vue`.
+- E2E thật: course 5 `MTH-254`, object 9 `Ôn tập Quan hệ và Hàm`, 5 cards, published; generation-worker khoảng 20 giây; Student mở/lật/chuyển thẻ thành công.
+- Tests: PHPUnit 41/41 (266 assertions), Pytest 26/26, Vite build 86 modules; Compose 8 services Up.
+- Chroma count thực tế trước Phase 1 là 645, khác snapshot 551 ở Section 14. Không xóa/reset để ép về 551; cần coi 645 là baseline runtime hiện tại và truy Git/processing history nếu cần giải thích nguồn 94 vectors tăng thêm.
+- Runtime thật: Laravel 12/PHP 8.4/Python 3.12/MySQL 8.4; prompt Sprint 4 ghi các version cũ. Frontend không có Tailwind/Pinia/Lucide; không cài thêm package trong Phase 1.
+- Đã redaction Gemini key thật bị ghi trong `docs/SPRINT_2_EXECUTION_PLAN.md` từ lịch sử trước; cần rotate key vì xóa khỏi working tree không xóa secret khỏi Git history.
+- Chưa làm: Mindmap, Slides, persistent spaced repetition, analytics, restore version. Xem `docs/SPRINT_4_PHASE1_EVIDENCE.md` và Section 7 của `docs/SPRINT_4_EXECUTION_PLAN.md`.
+

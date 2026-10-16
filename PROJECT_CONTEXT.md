@@ -1220,3 +1220,17 @@ This records implementation and local runtime evidence on branch `feature/sprint
   - Frontend production build: **73 modules transformed, 0 errors**.
   - Live API testing: Verified student join, duplicate join rejection, lecturer code regeneration, and enrollment open/close toggles.
 
+## 36. Sprint 4 Phase 1 — Flashcard Vertical Slice — 2026-10-16
+
+- PB25 / US-16 là hạng mục Sprint 3 theo User Story v1.1 và được hoàn thành ở đây như carry-over của Sprint 4; không coi việc có kế hoạch Sprint 4 là bằng chứng các hạng mục khác đã Done.
+- Migration tăng dần mở rộng `learning_objects.type` sang `quiz|flashcard|mindmap|slide`; Phase 1 chỉ triển khai behavior cho `quiz` và `flashcard`. Mindmap/slide vẫn chưa có endpoint/UI.
+- FastAPI thêm contract nội bộ sinh Flashcard với strict schema, `max_pages` mặc định 5, retrieval theo course/document và server-side mapping citation index sang metadata Chroma thật.
+- Laravel thêm endpoint owner-only, generation job trên queue `generation`, idempotency UUID, retry/error state, JSON version snapshot, draft edit và publish/archive. Student phải enrolled và chỉ đọc object published.
+- Vue thêm Flashcard tab, editor/preview, `FlashcardPlayer.vue` dùng `MathText.vue`, keyboard Space/Arrow và workspace Student. “Đã hiểu/Cần ôn lại” mới là local UI state, chưa phải spaced-repetition persistence/analytics.
+- E2E thật tạo Learning Object ID 9 trên course MTH-254: 5 thẻ, `max_pages=3`, generation khoảng 20 giây, citation/source locator và KaTeX hiển thị; publish và Student access/player đã xác minh.
+- Regression thực tế: PHPUnit **41/41, 266 assertions**; Pytest **26/26**; Vite **86 modules**; 8 Compose services Up.
+- Bàn giao trước đó ghi 551 vectors, nhưng phép đo trước Phase 1 ngày 16/10 trả **645 vectors**. Flashcard generation không ghi/xóa vector; đây là chênh lệch trạng thái cần giữ nguyên và điều tra qua lịch sử ingestion, không tự sửa dữ liệu.
+- Stack thực tế được Docker/build xác minh là Laravel 12, PHP 8.4, Python 3.12 và MySQL 8.4; các số phiên bản Laravel 11/PHP 8.2/Python 3.11/MySQL 8.0 trong prompt bàn giao là lỗi thời.
+- Một Gemini key thật tồn tại trong `docs/SPRINT_2_EXECUTION_PLAN.md` từ lịch sử trước Phase 1 đã được thay bằng placeholder. Vì secret từng nằm trong file theo dõi bởi Git, project lead phải rotate key tại Google AI Studio và chỉ cập nhật `.env` local.
+- Evidence chi tiết: `docs/SPRINT_4_PHASE1_EVIDENCE.md`.
+

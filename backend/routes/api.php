@@ -50,6 +50,7 @@ Route::middleware('auth.token')->group(function () {
     Route::get('/courses/{course}/learning-objects', [LearningObjectController::class, 'index'])->middleware('role:lecturer,student');
     Route::get('/courses/{course}/learning-objects/{learningObject}', [LearningObjectController::class, 'show'])->middleware('role:lecturer,student');
     Route::post('/courses/{course}/learning-objects/quizzes', [LearningObjectController::class, 'storeQuiz'])->middleware('role:lecturer');
+    Route::post('/courses/{course}/learning-objects/flashcards', [LearningObjectController::class, 'storeFlashcards'])->middleware('role:lecturer');
     Route::post('/courses/{course}/learning-objects/{learningObject}/generation-runs/retry', [LearningObjectController::class, 'retryGeneration'])->middleware('role:lecturer');
     Route::patch('/courses/{course}/learning-objects/{learningObject}', [LearningObjectController::class, 'update'])->middleware('role:lecturer');
     Route::post('/courses/{course}/learning-objects/{learningObject}/publish', [LearningObjectController::class, 'publish'])->middleware('role:lecturer');

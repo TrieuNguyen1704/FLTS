@@ -61,7 +61,7 @@ class BackgroundTaskController
                 ];
             });
 
-        $quizRuns = LearningObjectGenerationRun::with(['learningObject.course', 'learningObject.quiz'])
+        $generationRuns = LearningObjectGenerationRun::with(['learningObject.course', 'learningObject.quiz', 'learningObject.latestVersion'])
             ->whereHas('learningObject', fn ($q) => $q->whereIn('course_id', $courseIds))
             ->latest('id')
             ->limit(20)
@@ -72,22 +72,24 @@ class BackgroundTaskController
                 $status = $run->status;
                 $isActive = in_array($status, ['queued', 'generating'], true);
 
+                $isFlashcard = $lo?->type === 'flashcard';
+                $objectLabel = $isFlashcard ? 'Flashcard' : 'Quiz';
                 $stageLabels = [
                     'queued' => 'Đang chờ trong hàng đợi',
-                    'generating' => 'Đang phân tích tài liệu và sinh câu hỏi',
-                    'completed' => 'Đã tạo Quiz thành công',
-                    'failed' => 'Tạo Quiz thất bại',
+                    'generating' => $isFlashcard ? 'Đang tạo bộ thẻ ghi nhớ' : 'Đang phân tích tài liệu và sinh câu hỏi',
+                    'completed' => "Đã tạo {$objectLabel} thành công",
+                    'failed' => "Tạo {$objectLabel} thất bại",
                 ];
 
                 return [
-                    'id' => 'quiz_'.$run->id,
+                    'id' => ($isFlashcard ? 'flashcard_' : 'quiz_').$run->id,
                     'raw_id' => $run->id,
-                    'type' => 'quiz_generation',
+                    'type' => $isFlashcard ? 'flashcard_generation' : 'quiz_generation',
                     'course_id' => $course?->id,
                     'course_name' => $course?->name,
                     'course_code' => $course?->code,
                     'resource_id' => $lo?->id,
-                    'title' => $lo?->title ?? 'Quiz #'.$run->learning_object_id,
+                    'title' => $lo?->title ?? $objectLabel.' #'.$run->learning_object_id,
                     'status' => $status,
                     'is_active' => $isActive,
                     'stage' => $status,
@@ -96,12 +98,13 @@ class BackgroundTaskController
                     'finished_at' => $run->finished_at?->toISOString(),
                     'created_at' => $run->created_at?->toISOString(),
                     'error_message' => $run->error_message,
-                    'retryable' => $status === 'failed' && $lo && !$lo->quiz,
-                    'target_url' => $course ? "/lecturer/courses/{$course->id}?tab=quizzes" : null,
+                    'retryable' => $status === 'failed' && $lo
+                        && ($isFlashcard ? !$lo->latestVersion : !$lo->quiz),
+                    'target_url' => $course ? "/lecturer/courses/{$course->id}/learning-objects" : null,
                 ];
             });
 
-        $tasks = $docRuns->concat($quizRuns)->sortByDesc(fn ($t) => $t['created_at'])->values()->take(25);
+        $tasks = $docRuns->concat($generationRuns)->sortByDesc(fn ($t) => $t['created_at'])->values()->take(25);
         $activeCount = $tasks->filter(fn ($t) => $t['is_active'])->count();
 
         return response()->json([

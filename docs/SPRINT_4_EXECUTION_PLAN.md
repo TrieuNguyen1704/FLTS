@@ -159,11 +159,11 @@ flowchart TD
 ## 5. Lộ trình Thực hiện theo Tuần (Sprint Timeline)
 
 ### 📅 Tuần 1 (23/10 – 29/10/2026): Nền tảng Backend & Flashcard Vertical Slice
-- [ ] Chạy migration mở rộng enum `type` trong bảng `learning_objects`.
-- [ ] Xây dựng Pydantic Schema và Endpoint sinh Flashcard tại `ai-service/main.py`.
-- [ ] Xây dựng Job Laravel `GenerateFlashcardLearningObject` tích hợp Queue Worker và Background Task Center.
-- [ ] Xây dựng component `FlashcardEditorView.vue` và `FlashcardPlayer.vue` (hiệu ứng lật 3D, hỗ trợ phím Space/Mũi tên).
-- [ ] Viết kiểm thử tự động: Pytest cho Flashcard generator, PHPUnit cho Flashcard API.
+- [x] Chạy migration mở rộng enum `type` trong bảng `learning_objects`.
+- [x] Xây dựng Pydantic Schema và Endpoint sinh Flashcard tại `ai-service/main.py`.
+- [x] Xây dựng Job Laravel `GenerateFlashcardLearningObject` tích hợp Queue Worker và Background Task Center.
+- [x] Xây dựng component `FlashcardEditorView.vue` và `FlashcardPlayer.vue` (hiệu ứng lật 3D, hỗ trợ phím Space/Mũi tên).
+- [x] Viết kiểm thử tự động: Pytest cho Flashcard generator, PHPUnit cho Flashcard API.
 
 ### 📅 Tuần 2 (30/10 – 05/11/2026): Mindmap / Sơ đồ tư duy Phân cấp
 - [ ] Xây dựng Prompt phân tích cây tri thức và Endpoint sinh Mindmap JSON tại `ai-service/main.py`.
@@ -187,7 +187,35 @@ flowchart TD
 
 ## 6. Tiêu chí Hoàn thành (Definition of Done - DoD)
 
-1. **Tính tương thích ngược 100%:** Toàn bộ tính năng Quiz, xác thực, quản lý khóa học, sinh viên và 551 vector ChromaDB hiện tại hoạt động bình thường, không xảy ra xung đột.
+1. **Tính tương thích ngược 100%:** Toàn bộ tính năng Quiz, xác thực, quản lý khóa học, sinh viên và dữ liệu ChromaDB hiện hữu hoạt động bình thường, không xảy ra xung đột. Kế hoạch ban đầu ghi 551 vectors; runtime ngày 16/10 đo được 645 và được giữ nguyên, xem mục 7.
 2. **Schema & Validation:** Mọi học liệu AI sinh ra đều phải tuân thủ JSON Schema, có trích dẫn tài liệu nguồn (Grounded Citations) và không chứa lỗi định dạng công thức toán.
 3. **Trải nghiệm Coursera đồng nhất:** Tất cả 3 loại học liệu mới đều sử dụng bảng màu Coursera Royal Blue (`#0056D2`), bo góc chuẩn, typography rõ ràng và hỗ trợ responsive trên mọi kích thước màn hình.
 4. **Kiểm thử tự động:** Toàn bộ các bài test mới phải đạt tỷ lệ 100% Passed trên cả Laravel và FastAPI.
+
+---
+
+## 7. Cập nhật thực thi Phase 1 — 16/10/2026
+
+### Trạng thái và cách đối chiếu backlog
+
+PB25 / US-16 được User Story v1.1 xếp trong Sprint 3. Phase 1 của kế hoạch này hoàn thành hạng mục đó như một **carry-over từ Sprint 3 sang Sprint 4**; không sửa lịch sử để coi PB25 vốn thuộc Sprint 4. Các mục Mindmap, Slides, analytics và spaced-repetition persistence vẫn chưa được triển khai.
+
+### Kết quả đã xác minh
+
+- Migration `2026_10_16_000023_expand_learning_object_types` đã chạy trên MySQL theo kiểu tăng dần (batch 9), không reset database.
+- FastAPI có contract có token `POST /internal/v1/learning-objects/generate-flashcards`, Pydantic kiểm tra 5–15 thẻ, difficulty, Top-K và `max_pages` 1–10. Citation index do Gemini trả về được server map sang vector ID/source locator/document thật từ ChromaDB.
+- Laravel có endpoint Lecturer-owner `POST /api/courses/{course}/learning-objects/flashcards`, job queue `generation`, run state/retry, JSON version snapshot, edit draft, publish/archive và RBAC Student.
+- Vue có tab Flashcard trong thư viện học liệu, background task, editor/preview, `MathText.vue`, player lật 3D + Space/Arrow, và workspace Student chỉ hiển thị bản published.
+- E2E thật trên course `MTH-254`: tạo Learning Object ID 9 với 5 thẻ, `max_pages=3`; worker hoàn tất trong khoảng 20 giây; nội dung có source locator và công thức KaTeX; publish thành công; Student mở/lật/chuyển/đánh dấu thẻ thành công.
+- PHPUnit: **41/41 tests, 266 assertions**. Pytest: **26/26 tests** (1 cảnh báo deprecation từ Starlette). Vite production build: **86 modules**, thành công.
+- Docker: đủ 8 service Up; `api`, `ai`, `mysql`, `chroma`, `mailpit` healthy; `web`, `queue-worker`, `generation-worker` running.
+
+### Xung đột với bàn giao và giới hạn còn lại
+
+- Runtime thật là Laravel 12 / PHP 8.4 / Python 3.12 / MySQL 8.4. Prompt bàn giao ghi Laravel 11 / PHP 8.2 / Python 3.11 / MySQL 8.0 là thông tin cũ.
+- Frontend thật không cài Tailwind, Pinia hoặc Lucide; Phase 1 tiếp tục dùng Vue Router, service/store hiện hữu và CSS có tổ chức để không cài package ngoài phạm vi.
+- ChromaDB được đo là **645 vectors trước Phase 1**, không phải 551. Phase 1 Flashcard chỉ truy vấn, không ghi/xóa vector; số lượng phải được đối chiếu lại khi closeout.
+- Nút “Đã hiểu / Cần ôn lại” chỉ lưu state trong phiên UI. Spaced repetition, learning-event persistence và analytics chưa có schema/backend nên không được tính là hoàn thành.
+- Một account hiện chỉ giữ một bearer token. Đăng nhập cùng tài khoản demo ở cửa sổ khác sẽ làm token cũ hết hiệu lực; đây là giới hạn xác thực hiện hữu, không phải lỗi generation.
+
+Chi tiết bằng chứng và lệnh tái kiểm tra: `docs/SPRINT_4_PHASE1_EVIDENCE.md`.

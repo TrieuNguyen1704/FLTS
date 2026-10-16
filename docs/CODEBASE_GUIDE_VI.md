@@ -229,3 +229,15 @@ Luồng tạo Quiz hiện tại: `LearningObjectsView.generateQuiz()` gửi UUID
 Document ingestion dùng queue `documents`; Quiz dùng queue `generation`. Đây là lý do Compose có hai worker. Trong `ai-service/main.py`, endpoint document đọc upload bất đồng bộ rồi đưa phần extraction/embedding đồng bộ vào `run_in_threadpool()`, tránh retry Gemini dài khóa health check và request Quiz.
 
 Luồng xóa course: `CourseManagementView` yêu cầu nhập đúng code → `courseService.destroy()` → `CourseController@destroy` xác minh Lecturer owner, confirmation và không có processing/generating task → `RagService::deleteCourseVectors()` → xóa file local → xóa course trong transaction. Foreign keys cascade enrollment, document run/chunk/reference, learning object/version/Quiz/question/option/attempt/answer. Nếu Chroma không xóa được, controller trả 503 an toàn trước khi đụng file/database.
+
+## 17. Đường đọc code Sprint 4 Phase 1 — Flashcard (16/10/2026)
+
+Đọc theo chuỗi: `LearningObjectsView.vue#generate()` → `learningObjectService.generateFlashcards()` → route `POST /courses/{course}/learning-objects/flashcards` → `LearningObjectController@storeFlashcards` → `GenerateFlashcardLearningObject` → `RagService::generateFlashcards()` → FastAPI `generate_flashcards()` → Chroma retrieval → Gemini structured JSON → Laravel lưu `learning_object_versions.content_payload`.
+
+Không có bảng `flashcards` riêng. Mỗi phiên bản lưu snapshot JSON `{ cards: [...] }` trong `learning_object_versions`; `LearningObject::latestVersion()` lấy bản hiện hành. Khi giảng viên sửa draft, controller validate front/back/citations rồi tạo version mới. Publish yêu cầu tối thiểu 3 thẻ và mỗi thẻ có front, back, citation. Student chỉ lấy được object published của course đã enroll.
+
+Frontend giảng viên dùng `FlashcardEditorView.vue`; phía Student dùng `StudentFlashcardView.vue`; cả hai tái sử dụng `FlashcardPlayer.vue` và `MathText.vue`. Player giữ “đã hiểu/cần ôn lại” trong memory của component; refresh trang sẽ mất state vì chưa có bảng learning events/spaced repetition.
+
+`max_pages` không cắt file gốc hay xóa vector. FastAPI retrieve Top-K, sau đó giới hạn context theo số source locator/page duy nhất trước khi gửi Gemini để giảm latency/quota. Citation từ model chỉ là index; server mới map index đó về `vector_id`, `document_id`, `document_name`, `source_locator`, tránh model tự bịa nguồn.
+
+Test trọng tâm: `SprintFourFlashcardApiTest.php` và `test_flashcard_generation.py`. Evidence runtime: `docs/SPRINT_4_PHASE1_EVIDENCE.md`.

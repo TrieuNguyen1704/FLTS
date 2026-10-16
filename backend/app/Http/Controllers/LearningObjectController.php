@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\GenerateFlashcardLearningObject;
 use App\Jobs\GenerateQuizLearningObject;
 use App\Models\Course;
 use App\Models\LearningObject;
@@ -17,7 +18,7 @@ class LearningObjectController
     public function index(Request $request, Course $course): JsonResponse
     {
         $this->ensureCourseAccess($request, $course);
-        $query = $course->learningObjects()->with(['creator:id,name', 'quiz', 'latestGenerationRun'])->withMax('versions', 'version_number');
+        $query = $course->learningObjects()->with(['creator:id,name', 'quiz', 'latestVersion', 'latestGenerationRun'])->withMax('versions', 'version_number');
         if ($request->user()->role === 'student') {
             $query->where('status', 'published');
         }
@@ -82,7 +83,66 @@ class LearningObjectController
             ]);
             return [$object, $run];
         });
-        GenerateQuizLearningObject::dispatch($run->id);
+        $this->dispatchGeneration($learningObject, $run);
+
+        return response()->json(['learning_object' => $this->detail($learningObject->fresh())], 202);
+    }
+
+    public function storeFlashcards(Request $request, Course $course): JsonResponse
+    {
+        $this->ensureOwner($request, $course);
+        $data = $request->validate([
+            'title' => ['nullable', 'string', 'max:255'],
+            'description' => ['nullable', 'string', 'max:2000'],
+            'topic' => ['required', 'string', 'min:3', 'max:500'],
+            'difficulty' => ['required', 'in:easy,medium,hard'],
+            'card_count' => ['required', 'integer', 'min:5', 'max:15'],
+            'document_ids' => ['nullable', 'array', 'max:50'],
+            'document_ids.*' => ['integer'],
+            'top_k' => ['nullable', 'integer', 'min:3', 'max:15'],
+            'max_pages' => ['nullable', 'integer', 'min:1', 'max:10'],
+            'request_id' => ['required', 'uuid'],
+        ]);
+        $documentIds = array_values(array_unique($data['document_ids'] ?? []));
+        if ($documentIds !== [] && $course->documents()->whereIn('id', $documentIds)->where('processing_status', 'processed')->count() !== count($documentIds)) {
+            return response()->json(['message' => 'Every selected document must belong to this course and be processed.'], 422);
+        }
+
+        $existingRun = LearningObjectGenerationRun::with('learningObject')->where('request_id', $data['request_id'])->first();
+        if ($existingRun) {
+            abort_unless($existingRun->learningObject->course_id === $course->id && $existingRun->learningObject->created_by === $request->user()->id, 409);
+            return response()->json(['learning_object' => $this->detail($existingRun->learningObject)], 202);
+        }
+
+        $parameters = [
+            'topic' => $data['topic'],
+            'difficulty' => $data['difficulty'],
+            'card_count' => $data['card_count'],
+            'document_ids' => $documentIds,
+            'top_k' => $data['top_k'] ?? 10,
+            'max_pages' => $data['max_pages'] ?? 5,
+            'requested_title' => $data['title'] ?? null,
+            'requested_description' => $data['description'] ?? null,
+        ];
+
+        [$learningObject, $run] = DB::transaction(function () use ($request, $course, $data, $parameters) {
+            $object = LearningObject::create([
+                'course_id' => $course->id,
+                'type' => 'flashcard',
+                'title' => ($data['title'] ?? null) ?: 'Flashcard: '.$data['topic'],
+                'description' => $data['description'] ?? null,
+                'status' => 'draft',
+                'created_by' => $request->user()->id,
+            ]);
+            $run = $object->generationRuns()->create([
+                'request_id' => $data['request_id'],
+                'attempt_number' => 1,
+                'status' => 'queued',
+                'generation_params' => $parameters,
+            ]);
+            return [$object, $run];
+        });
+        $this->dispatchGeneration($learningObject, $run);
 
         return response()->json(['learning_object' => $this->detail($learningObject->fresh())], 202);
     }
@@ -92,7 +152,10 @@ class LearningObjectController
         $this->ensureObjectCourse($course, $learningObject);
         $this->ensureOwner($request, $course);
         $latest = $learningObject->generationRuns()->latest('attempt_number')->firstOrFail();
-        abort_unless($latest->status === 'failed' && !$learningObject->quiz()->exists(), 422, 'Only a failed generation can be retried.');
+        $hasPersistedContent = $learningObject->type === 'quiz'
+            ? $learningObject->quiz()->exists()
+            : $learningObject->versions()->exists();
+        abort_unless($latest->status === 'failed' && !$hasPersistedContent, 422, 'Only a failed generation can be retried.');
 
         $run = $learningObject->generationRuns()->create([
             'request_id' => (string) Str::uuid(),
@@ -100,7 +163,7 @@ class LearningObjectController
             'status' => 'queued',
             'generation_params' => $latest->generation_params,
         ]);
-        GenerateQuizLearningObject::dispatch($run->id);
+        $this->dispatchGeneration($learningObject, $run);
 
         return response()->json(['learning_object' => $this->detail($learningObject->fresh())], 202);
     }
@@ -120,6 +183,10 @@ class LearningObjectController
         $this->ensureObjectCourse($course, $learningObject);
         $this->ensureOwner($request, $course);
         abort_unless($learningObject->status === 'draft', 422, 'Only draft learning objects can be edited.');
+        if ($learningObject->type === 'flashcard') {
+            return $this->updateFlashcards($request, $learningObject);
+        }
+        abort_unless($learningObject->type === 'quiz', 422, 'This learning-object type is not editable yet.');
         $data = $request->validate([
             'title' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string', 'max:2000'],
@@ -164,6 +231,16 @@ class LearningObjectController
         $this->ensureObjectCourse($course, $learningObject);
         $this->ensureOwner($request, $course);
         abort_unless($learningObject->status === 'draft', 422, 'Only a draft can be published.');
+        if ($learningObject->type === 'flashcard') {
+            $cards = $learningObject->versions()->latest('version_number')->firstOrFail()->content_payload['cards'] ?? [];
+            abort_unless(count($cards) >= 3, 422, 'A published Flashcard set requires at least three cards.');
+            foreach ($cards as $card) {
+                abort_unless(!empty($card['front']) && !empty($card['back']) && !empty($card['citations']), 422, 'Every Flashcard requires front, back, and grounded citations.');
+            }
+            $learningObject->update(['status' => 'published', 'published_at' => now()]);
+            return response()->json(['learning_object' => $this->detail($learningObject->fresh()), 'message' => 'Flashcards published.']);
+        }
+        abort_unless($learningObject->type === 'quiz', 422, 'This learning-object type cannot be published yet.');
         $quiz = $learningObject->quiz()->with('questions.options')->firstOrFail();
         abort_unless($quiz->questions->count() >= 3, 422, 'A published quiz requires at least three questions.');
         foreach ($quiz->questions as $question) {
@@ -192,7 +269,7 @@ class LearningObjectController
             $learningObject->delete();
         });
 
-        return response()->json(['message' => 'Quiz đã được xóa thành công.']);
+        return response()->json(['message' => 'Đã xóa học liệu thành công.']);
     }
 
 
@@ -237,11 +314,15 @@ class LearningObjectController
 
     private function summary(LearningObject $object): array
     {
+        $latestPayload = $object->latestVersion?->content_payload
+            ?? $object->versions()->latest('version_number')->first()?->content_payload
+            ?? [];
         return [
             'id' => $object->id, 'course_id' => $object->course_id, 'type' => $object->type,
             'title' => $object->title, 'description' => $object->description, 'status' => $object->status,
             'published_at' => $object->published_at, 'created_at' => $object->created_at,
             'creator' => $object->creator, 'total_questions' => $object->quiz?->total_questions,
+            'total_cards' => $object->type === 'flashcard' ? count($latestPayload['cards'] ?? []) : null,
             'current_version' => (int) ($object->versions_max_version_number ?? $object->versions()->max('version_number')),
             'generation' => $this->generationSummary($object->latestGenerationRun ?? $object->generationRuns()->latest('attempt_number')->first()),
         ];
@@ -249,7 +330,7 @@ class LearningObjectController
 
     private function detail(LearningObject $object, bool $studentView = false): array
     {
-        $object->load(['creator:id,name', 'versions' => fn ($query) => $query->latest('version_number'), 'quiz.questions.options', 'latestGenerationRun']);
+        $object->load(['creator:id,name', 'versions' => fn ($query) => $query->latest('version_number'), 'latestVersion', 'quiz.questions.options', 'latestGenerationRun']);
         $quiz = $object->quiz;
         $data = $this->summary($object);
         $data['versions'] = $object->versions->map(fn ($version) => [
@@ -280,7 +361,56 @@ class LearningObjectController
                 return $questionData;
             })->values(),
         ] : null;
+        $data['flashcard'] = $object->type === 'flashcard' && $object->latestVersion
+            ? $object->latestVersion->content_payload
+            : null;
         return $data;
+    }
+
+    private function updateFlashcards(Request $request, LearningObject $learningObject): JsonResponse
+    {
+        $data = $request->validate([
+            'title' => ['required', 'string', 'max:255'],
+            'description' => ['nullable', 'string', 'max:2000'],
+            'cards' => ['required', 'array', 'min:3', 'max:50'],
+            'cards.*.front' => ['required', 'string', 'min:1', 'max:2000'],
+            'cards.*.back' => ['required', 'string', 'min:1', 'max:4000'],
+            'cards.*.hint' => ['nullable', 'string', 'max:2000'],
+            'cards.*.citations' => ['required', 'array', 'min:1'],
+            'cards.*.citations.*.vector_id' => ['required', 'string', 'max:255'],
+            'cards.*.citations.*.source_locator' => ['nullable', 'string', 'max:255'],
+            'cards.*.citations.*.document_id' => ['nullable', 'integer'],
+            'cards.*.citations.*.document_name' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        DB::transaction(function () use ($request, $learningObject, $data) {
+            $learningObject->update(['title' => $data['title'], 'description' => $data['description'] ?? null]);
+            $previous = $learningObject->versions()->latest('version_number')->first();
+            $cards = collect($data['cards'])->values()->map(fn (array $card, int $index) => [
+                'id' => $index + 1,
+                'front' => $card['front'],
+                'back' => $card['back'],
+                'hint' => $card['hint'] ?? '',
+                'citations' => array_values($card['citations']),
+            ])->all();
+            $learningObject->versions()->create([
+                'version_number' => ((int) $previous?->version_number) + 1,
+                'content_payload' => ['cards' => $cards],
+                'generation_params' => $previous?->generation_params ?? [],
+                'created_by' => $request->user()->id,
+            ]);
+        });
+
+        return response()->json(['learning_object' => $this->detail($learningObject->fresh())]);
+    }
+
+    private function dispatchGeneration(LearningObject $learningObject, LearningObjectGenerationRun $run): void
+    {
+        if ($learningObject->type === 'flashcard') {
+            GenerateFlashcardLearningObject::dispatch($run->id);
+            return;
+        }
+        GenerateQuizLearningObject::dispatch($run->id);
     }
 
     private function generationSummary(?LearningObjectGenerationRun $run): ?array
