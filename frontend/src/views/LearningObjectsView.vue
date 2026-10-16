@@ -16,23 +16,31 @@ const router = useRouter()
 const course = ref(null)
 const documents = ref([])
 const objects = ref([])
+const activeType = ref(route.query.type === 'flashcard' ? 'flashcard' : 'quiz')
 const loading = ref(true)
 const submitting = ref(false)
 const retryingId = ref(null)
-const quizToDelete = ref(null)
+const objectToDelete = ref(null)
 const deleting = ref(false)
 const error = ref('')
 const activeObjectId = ref(null)
 let pollTimer = null
-const form = reactive({ title: '', topic: '', difficulty: 'medium', question_count: 5, top_k: 8, passing_score: 60, time_limit_minutes: null, document_ids: [] })
+
+const quizForm = reactive({ title: '', topic: '', difficulty: 'medium', question_count: 5, top_k: 8, passing_score: 60, time_limit_minutes: null, document_ids: [] })
+const flashcardForm = reactive({ title: '', topic: '', difficulty: 'medium', card_count: 8, top_k: 10, max_pages: 5, document_ids: [] })
 const processedDocuments = computed(() => documents.value.filter((document) => document.processing_status === 'processed'))
+const visibleObjects = computed(() => objects.value.filter((object) => object.type === activeType.value))
 const hasPendingGeneration = computed(() => objects.value.some((object) => ['queued', 'generating'].includes(object.generation?.status)))
 
+function typeLabel(type) { return type === 'flashcard' ? 'Flashcard' : 'Quiz' }
+function editorRoute(object) {
+  return { name: object.type === 'flashcard' ? 'flashcard-editor' : 'quiz-editor', params: { courseId: course.value.id, objectId: object.id } }
+}
 function generationLabel(object) {
   const status = object.generation?.status
   if (status === 'queued') return 'Đang chờ xử lý'
-  if (status === 'generating') return 'Đang tạo câu hỏi'
-  if (status === 'failed') return 'Tạo Quiz thất bại'
+  if (status === 'generating') return `Đang tạo ${typeLabel(object.type)}`
+  if (status === 'failed') return 'Tạo học liệu thất bại'
   if (object.status === 'published') return 'Đã xuất bản'
   if (object.status === 'archived') return 'Đã lưu trữ'
   return 'Bản nháp'
@@ -48,67 +56,63 @@ async function load() {
       documentService.list(route.params.courseId),
     ])
     course.value = courseResult.course
-    objects.value = objectResult.learning_objects
-    documents.value = documentResult.documents
-  } catch (requestError) {
-    error.value = requestError.message || 'Không thể tải học liệu.'
-  } finally {
-    loading.value = false
-  }
+    objects.value = objectResult.learning_objects || []
+    documents.value = documentResult.documents || []
+  } catch (requestError) { error.value = requestError.message || 'Không thể tải thư viện học liệu.' }
+  finally { loading.value = false }
 }
 
 async function pollPending() {
-  if (!hasPendingGeneration.value) return
   const pending = objects.value.filter((object) => ['queued', 'generating'].includes(object.generation?.status))
+  if (!pending.length) return
   await Promise.all(pending.map(async (object) => {
     try {
       const result = await learningObjectService.get(route.params.courseId, object.id)
+      const updated = result.learning_object
       const index = objects.value.findIndex((item) => item.id === object.id)
-      if (index !== -1) objects.value[index] = result.learning_object
-      if (result.learning_object.generation?.status === 'completed' && activeObjectId.value === object.id) {
+      if (index !== -1) objects.value[index] = updated
+      if (updated.generation?.status === 'completed' && activeObjectId.value === object.id) {
         activeObjectId.value = null
-        toast.show('Quiz đã được tạo. Vui lòng kiểm tra nội dung trước khi xuất bản.')
-        await router.push({ name: 'quiz-editor', params: { courseId: route.params.courseId, objectId: object.id } })
-      }
-      if (result.learning_object.generation?.status === 'failed' && activeObjectId.value === object.id) {
+        toast.show(`${typeLabel(updated.type)} đã được tạo. Hãy kiểm tra nội dung trước khi xuất bản.`)
+        await router.push(editorRoute(updated))
+      } else if (updated.generation?.status === 'failed' && activeObjectId.value === object.id) {
         activeObjectId.value = null
-        toast.show(result.learning_object.generation.error_message || 'Không thể tạo Quiz.', 'error')
+        toast.show(updated.generation.error_message || 'Không thể tạo học liệu.', 'error')
       }
-    } catch {
-      // A transient polling failure is retried automatically on the next interval.
-    }
+    } catch { /* Polling retries on the next interval. */ }
   }))
 }
 
-async function generateQuiz() {
-  error.value = ''
-  if (form.topic.trim().length < 3) {
-    error.value = 'Chủ đề cần có ít nhất 3 ký tự.'
-    return
+function generationPayload(form, type) {
+  const common = {
+    title: form.title.trim() || null,
+    topic: form.topic.trim(),
+    difficulty: form.difficulty,
+    top_k: Number(form.top_k),
+    document_ids: form.document_ids.map(Number),
+    request_id: crypto.randomUUID(),
   }
+  return type === 'flashcard'
+    ? { ...common, card_count: Number(form.card_count), max_pages: Number(form.max_pages) }
+    : { ...common, question_count: Number(form.question_count), passing_score: Number(form.passing_score), time_limit_minutes: form.time_limit_minutes ? Number(form.time_limit_minutes) : null }
+}
+
+async function generate() {
+  const form = activeType.value === 'flashcard' ? flashcardForm : quizForm
+  error.value = ''
+  if (form.topic.trim().length < 3) { error.value = 'Chủ đề cần có ít nhất 3 ký tự.'; return }
   submitting.value = true
   try {
-    const result = await learningObjectService.generateQuiz(route.params.courseId, {
-      title: form.title.trim() || null,
-      topic: form.topic.trim(),
-      difficulty: form.difficulty,
-      question_count: Number(form.question_count),
-      top_k: Number(form.top_k),
-      passing_score: Number(form.passing_score),
-      time_limit_minutes: form.time_limit_minutes ? Number(form.time_limit_minutes) : null,
-      document_ids: form.document_ids.map(Number),
-      request_id: crypto.randomUUID(),
-    })
+    const payload = generationPayload(form, activeType.value)
+    const result = activeType.value === 'flashcard'
+      ? await learningObjectService.generateFlashcards(route.params.courseId, payload)
+      : await learningObjectService.generateQuiz(route.params.courseId, payload)
     activeObjectId.value = result.learning_object.id
     objects.value.unshift(result.learning_object)
-    toast.show('Yêu cầu tạo Quiz đã được tiếp nhận. Bạn có thể tiếp tục làm việc trong khi hệ thống xử lý.')
+    toast.show(`Yêu cầu tạo ${typeLabel(activeType.value)} đã được đưa vào hàng đợi. Bạn có thể chuyển trang trong khi hệ thống xử lý.`)
     backgroundTasks.fetchTasks()
-    await pollPending()
-  } catch (requestError) {
-    error.value = requestError.message || 'Không thể gửi yêu cầu tạo Quiz lúc này.'
-  } finally {
-    submitting.value = false
-  }
+  } catch (requestError) { error.value = requestError.message || 'Không thể gửi yêu cầu tạo học liệu.' }
+  finally { submitting.value = false }
 }
 
 async function retryGeneration(object) {
@@ -118,207 +122,107 @@ async function retryGeneration(object) {
     const index = objects.value.findIndex((item) => item.id === object.id)
     if (index !== -1) objects.value[index] = result.learning_object
     activeObjectId.value = object.id
-    toast.show('Yêu cầu tạo lại Quiz đã được đưa vào hàng đợi.')
+    toast.show(`Yêu cầu tạo lại ${typeLabel(object.type)} đã được đưa vào hàng đợi.`)
     backgroundTasks.fetchTasks()
-  } catch (requestError) {
-    toast.show(requestError.message || 'Không thể tạo lại Quiz.', 'error')
-  } finally {
-    retryingId.value = null
-  }
+  } catch (requestError) { toast.show(requestError.message || 'Không thể thử lại tác vụ.', 'error') }
+  finally { retryingId.value = null }
 }
 
-async function removeQuiz() {
-  if (!quizToDelete.value) return
+async function removeObject() {
+  if (!objectToDelete.value) return
   deleting.value = true
   try {
-    await learningObjectService.delete(route.params.courseId, quizToDelete.value.id)
-    objects.value = objects.value.filter((item) => item.id !== quizToDelete.value.id)
-    toast.show('Đã xóa Quiz thành công.')
-    quizToDelete.value = null
-  } catch (err) {
-    toast.show(err.message || 'Không thể xóa Quiz.', 'error')
-  } finally {
-    deleting.value = false
-  }
+    const target = objectToDelete.value
+    await learningObjectService.delete(route.params.courseId, target.id)
+    objects.value = objects.value.filter((item) => item.id !== target.id)
+    toast.show(`Đã xóa ${typeLabel(target.type)}.`)
+    objectToDelete.value = null
+  } catch (requestError) { toast.show(requestError.message || 'Không thể xóa học liệu.', 'error') }
+  finally { deleting.value = false }
 }
 
-onMounted(async () => {
-  await load()
-  pollTimer = window.setInterval(pollPending, 3000)
-})
+onMounted(async () => { await load(); pollTimer = window.setInterval(pollPending, 3500) })
 onBeforeUnmount(() => window.clearInterval(pollTimer))
 </script>
 
 <template>
-  <button class="back-link" @click="router.push({ name: 'course-detail', params: { id: route.params.courseId } })">
-    ← Quay lại khóa học
-  </button>
-
-  <AppState
-    v-if="loading"
-    type="loading"
-    title="Đang tải học liệu"
-    message="Đang kiểm tra tài liệu và danh sách Quiz của khóa học..."
-  />
-  <AppState
-    v-else-if="error && !course"
-    type="error"
-    title="Không thể mở học liệu"
-    :message="error"
-    action-label="Thử lại"
-    @action="load"
-  />
+  <button class="back-link" @click="router.push({ name: 'course-detail', params: { id: route.params.courseId } })">Quay lại khóa học</button>
+  <AppState v-if="loading" type="loading" title="Đang tải học liệu" message="Đang lấy tài liệu nguồn và danh sách học liệu." />
+  <AppState v-else-if="error && !course" type="error" title="Không thể mở thư viện học liệu" :message="error" action-label="Thử lại" @action="load" />
 
   <template v-else>
     <section class="page-heading">
-      <div>
-        <span class="eyebrow">{{ course.code }} · BIÊN SOẠN BÀI TẬP</span>
-        <h1>Quản lý Quiz tự động</h1>
-        <p>Tạo bộ câu hỏi trắc nghiệm tự động từ tài liệu giáo trình thông qua AI RAG, kiểm tra nội dung và xuất bản cho sinh viên.</p>
-      </div>
+      <div><span class="eyebrow">{{ course.code }} · BIÊN SOẠN HỌC LIỆU</span><h1>Thư viện học liệu</h1><p>Tạo, kiểm tra và xuất bản nội dung học tập từ tài liệu đã xử lý của khóa học.</p></div>
     </section>
 
-    <!-- Quiz Generation Builder Panel -->
+    <div class="learning-tabs" role="tablist" aria-label="Loại học liệu">
+      <button :class="{ active: activeType === 'quiz' }" role="tab" @click="activeType = 'quiz'">Quiz</button>
+      <button :class="{ active: activeType === 'flashcard' }" role="tab" @click="activeType = 'flashcard'">Flashcard</button>
+    </div>
+
     <section class="learning-panel">
-      <header class="section-header">
-        <div>
-          <h2>Tạo Quiz mới bằng AI RAG</h2>
-          <p>Hệ thống tự động tìm kiếm đoạn văn liên quan trong giáo trình và tạo câu hỏi kèm đáp án giải thích.</p>
-        </div>
-      </header>
-
-      <form class="generation-form" @submit.prevent="generateQuiz">
-        <BaseInput v-model="form.title" label="Tiêu đề Quiz (không bắt buộc)" placeholder="Ví dụ: Kiểm tra Tuần 1 - Khái niệm cơ bản" />
-        <BaseInput v-model="form.topic" label="Chủ đề kiểm tra" placeholder="Ví dụ: Ma trận nghịch đảo và định thức" required />
-
-        <label class="field">
-          <span class="field__label">Độ khó</span>
-          <select v-model="form.difficulty">
-            <option value="easy">Dễ (Nhận biết & Thông hiểu)</option>
-            <option value="medium">Trung bình (Vận dụng)</option>
-            <option value="hard">Khó (Vận dụng nâng cao)</option>
-          </select>
-        </label>
-
-        <label class="field">
-          <span class="field__label">Số lượng câu hỏi</span>
-          <input v-model.number="form.question_count" type="number" min="3" max="20" />
-        </label>
-
-        <label class="field">
-          <span class="field__label">Số đoạn trích xuất tham khảo (Top K)</span>
-          <input v-model.number="form.top_k" type="number" min="3" max="15" />
-        </label>
-
-        <label class="field">
-          <span class="field__label">Điểm đạt yêu cầu (%)</span>
-          <input v-model.number="form.passing_score" type="number" min="0" max="100" />
-        </label>
-
-        <label class="field">
-          <span class="field__label">Thời gian làm bài (phút)</span>
-          <input v-model.number="form.time_limit_minutes" type="number" min="1" max="480" placeholder="Để trống nếu không giới hạn" />
-        </label>
+      <header class="section-header"><div><h2>Tạo {{ typeLabel(activeType) }} mới</h2><p>Chọn chủ đề và tài liệu nguồn. Kết quả được lưu ở trạng thái bản nháp để giảng viên kiểm tra.</p></div></header>
+      <form class="generation-form" @submit.prevent="generate">
+        <template v-if="activeType === 'quiz'">
+          <BaseInput v-model="quizForm.title" label="Tiêu đề (không bắt buộc)" placeholder="Ví dụ: Kiểm tra tuần 1" />
+          <BaseInput v-model="quizForm.topic" label="Chủ đề" placeholder="Ví dụ: Ma trận nghịch đảo" required />
+          <label class="field"><span class="field__label">Độ khó</span><select v-model="quizForm.difficulty"><option value="easy">Dễ</option><option value="medium">Trung bình</option><option value="hard">Khó</option></select></label>
+          <label class="field"><span class="field__label">Số câu hỏi</span><input v-model.number="quizForm.question_count" type="number" min="3" max="20" /></label>
+          <label class="field"><span class="field__label">Số đoạn nguồn</span><input v-model.number="quizForm.top_k" type="number" min="3" max="15" /></label>
+          <label class="field"><span class="field__label">Điểm đạt (%)</span><input v-model.number="quizForm.passing_score" type="number" min="0" max="100" /></label>
+          <label class="field"><span class="field__label">Thời gian (phút)</span><input v-model.number="quizForm.time_limit_minutes" type="number" min="1" max="480" placeholder="Không giới hạn" /></label>
+        </template>
+        <template v-else>
+          <BaseInput v-model="flashcardForm.title" label="Tiêu đề (không bắt buộc)" placeholder="Ví dụ: Khái niệm Đại số tuyến tính" />
+          <BaseInput v-model="flashcardForm.topic" label="Chủ đề" placeholder="Ví dụ: Không gian vector và cơ sở" required />
+          <label class="field"><span class="field__label">Độ khó</span><select v-model="flashcardForm.difficulty"><option value="easy">Dễ</option><option value="medium">Trung bình</option><option value="hard">Khó</option></select></label>
+          <label class="field"><span class="field__label">Số thẻ</span><input v-model.number="flashcardForm.card_count" type="number" min="5" max="15" /></label>
+          <label class="field"><span class="field__label">Số đoạn nguồn</span><input v-model.number="flashcardForm.top_k" type="number" min="3" max="15" /></label>
+          <label class="field"><span class="field__label">Số trang nguồn tối đa</span><input v-model.number="flashcardForm.max_pages" type="number" min="1" max="10" /></label>
+        </template>
 
         <fieldset class="document-picker">
-          <legend>Tài liệu giáo trình nguồn</legend>
-          <p v-if="!processedDocuments.length" class="muted">
-            Chưa có tài liệu sẵn sàng. Hãy xử lý ít nhất một tài liệu trước khi tạo Quiz.
-          </p>
+          <legend>Tài liệu nguồn</legend>
+          <p v-if="!processedDocuments.length" class="muted">Chưa có tài liệu sẵn sàng. Hãy xử lý ít nhất một tài liệu trước.</p>
           <label v-for="document in processedDocuments" :key="document.id">
-            <input v-model="form.document_ids" type="checkbox" :value="document.id" />
-            <span>📄 {{ document.original_name }}</span>
+            <input v-if="activeType === 'quiz'" v-model="quizForm.document_ids" type="checkbox" :value="document.id" />
+            <input v-else v-model="flashcardForm.document_ids" type="checkbox" :value="document.id" />
+            <span>{{ document.original_name }}</span>
           </label>
         </fieldset>
-
         <p v-if="error" class="form-error">{{ error }}</p>
-
-        <BaseButton
-          type="submit"
-          :loading="submitting"
-          :disabled="!processedDocuments.length || submitting || hasPendingGeneration"
-        >
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-          </svg>
-          {{ hasPendingGeneration ? 'Đang tạo Quiz bằng AI...' : 'Tạo Quiz tự động' }}
+        <BaseButton type="submit" :loading="submitting" :disabled="!processedDocuments.length || submitting">
+          Tạo {{ typeLabel(activeType) }}
         </BaseButton>
       </form>
     </section>
 
-    <!-- List of Quizzes -->
     <section class="content-section">
-      <header class="section-header">
-        <div>
-          <h2>Danh sách Quiz trong khóa học</h2>
-          <p>Chỉ những Quiz ở trạng thái "Đã xuất bản" mới hiển thị cho sinh viên.</p>
-        </div>
-        <span class="count-chip">{{ objects.length }} Quiz</span>
-      </header>
-
-      <div v-if="objects.length" class="learning-object-list">
-        <article v-for="object in objects" :key="object.id" class="learning-card">
-          <div class="learning-card__header">
-            <span
-              class="status-chip"
-              :class="`status-chip--${object.status}`"
-            >
-              {{ generationLabel(object) }}
-            </span>
-            <span v-if="object.current_version" class="quiz-spec-tag">
-              Phiên bản {{ object.current_version }} · {{ object.total_questions }} câu
-            </span>
-          </div>
-
-          <h3>{{ object.title }}</h3>
-          <p>{{ object.description || 'Chưa có mô tả chi tiết cho bài Quiz này.' }}</p>
-
-          <p v-if="object.generation?.status === 'failed'" class="form-error">
-            {{ object.generation.error_message }}
-          </p>
-
+      <header class="section-header"><div><h2>{{ typeLabel(activeType) }} trong khóa học</h2><p>Chỉ học liệu đã xuất bản mới hiển thị cho sinh viên.</p></div><span class="count-chip">{{ visibleObjects.length }} mục</span></header>
+      <div v-if="visibleObjects.length" class="learning-object-list">
+        <article v-for="object in visibleObjects" :key="object.id" class="learning-card">
+          <div class="learning-card__header"><span class="status-chip" :class="`status-chip--${object.status}`">{{ generationLabel(object) }}</span><span v-if="object.current_version" class="object-spec">Phiên bản {{ object.current_version }} · {{ object.type === 'flashcard' ? `${object.total_cards} thẻ` : `${object.total_questions} câu` }}</span></div>
+          <h3>{{ object.title }}</h3><p>{{ object.description || `Chưa có mô tả cho ${typeLabel(object.type)} này.` }}</p>
+          <p v-if="object.generation?.status === 'failed'" class="form-error">{{ object.generation.error_message }}</p>
           <div class="table-actions">
-            <RouterLink
-              v-if="object.generation?.status === 'completed' || object.quiz"
-              class="button button--secondary"
-              :to="{ name: 'quiz-editor', params: { courseId: course.id, objectId: object.id } }"
-            >
-              Mở chỉnh sửa Quiz
-            </RouterLink>
-            <BaseButton
-              v-if="object.generation?.status === 'failed'"
-              variant="secondary"
-              :loading="retryingId === object.id"
-              @click="retryGeneration(object)"
-            >
-              Thử lại
-            </BaseButton>
-            <BaseButton variant="danger-ghost" @click="quizToDelete = object">
-              Xóa Quiz
-            </BaseButton>
+            <RouterLink v-if="object.generation?.status === 'completed'" class="button button--secondary" :to="editorRoute(object)">Mở {{ typeLabel(object.type) }}</RouterLink>
+            <BaseButton v-if="object.generation?.status === 'failed'" variant="secondary" :loading="retryingId === object.id" @click="retryGeneration(object)">Thử lại</BaseButton>
+            <BaseButton variant="danger-ghost" @click="objectToDelete = object">Xóa</BaseButton>
           </div>
         </article>
       </div>
-
-      <AppState
-        v-else
-        title="Chưa có Quiz nào"
-        message="Hãy sử dụng biểu mẫu phía trên để tạo bài Quiz đầu tiên từ tài liệu của khóa học."
-      />
+      <AppState v-else :title="`Chưa có ${typeLabel(activeType)}`" message="Sử dụng biểu mẫu phía trên để tạo học liệu đầu tiên." />
     </section>
 
-    <!-- MODAL: XÓA QUIZ -->
-    <AppModal
-      v-model="quizToDelete"
-      title="Xác nhận xóa Quiz"
-      confirm-label="Xóa Quiz"
-      :danger="true"
-      :loading="deleting"
-      @confirm="removeQuiz"
-    >
-      <p>
-        Bạn có chắc chắn muốn xóa bài kiểm tra <strong>{{ quizToDelete?.title }}</strong>? Thao tác này sẽ xóa vĩnh viễn toàn bộ câu hỏi, đáp án và lịch sử làm bài liên quan.
-      </p>
+    <AppModal v-model="objectToDelete" title="Xác nhận xóa học liệu" confirm-label="Xóa vĩnh viễn" :danger="true" :loading="deleting" @confirm="removeObject">
+      <p>Bạn có chắc chắn muốn xóa <strong>{{ objectToDelete?.title }}</strong>? Dữ liệu liên quan không thể khôi phục.</p>
     </AppModal>
   </template>
 </template>
+
+<style scoped>
+.learning-tabs { display: flex; gap: 2px; margin-bottom: 18px; border-bottom: 1px solid #cbd5e1; }
+.learning-tabs button { padding: 11px 20px; border: 0; border-bottom: 3px solid transparent; background: transparent; color: var(--cds-text-secondary); font-weight: 700; cursor: pointer; }
+.learning-tabs button.active { border-bottom-color: #0056d2; color: #0056d2; }
+.object-spec { color: var(--cds-text-secondary); font-size: .78rem; }
+</style>

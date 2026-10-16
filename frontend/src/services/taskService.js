@@ -6,7 +6,7 @@ export const taskService = {
     apiRequest(`/courses/${courseId}/documents/${documentId}/processing-runs/retry`, {
       method: 'POST',
     }),
-  retryQuizTask: (courseId, learningObjectId) =>
+  retryGenerationTask: (courseId, learningObjectId) =>
     apiRequest(`/courses/${courseId}/learning-objects/${learningObjectId}/generation-runs/retry`, {
       method: 'POST',
     }),

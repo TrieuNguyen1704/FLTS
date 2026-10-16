@@ -209,6 +209,43 @@ class QuizOutput(BaseModel):
     questions: list[QuizQuestionOutput]
 
 
+class FlashcardGenerationRequest(BaseModel):
+    course_id: int
+    topic: str = Field(min_length=3, max_length=500)
+    difficulty: Literal['easy', 'medium', 'hard'] = 'medium'
+    card_count: int = Field(default=8, ge=5, le=15)
+    document_ids: list[int] = Field(default_factory=list)
+    top_k: int = Field(default=10, ge=3, le=15)
+    max_pages: int = Field(default=5, ge=1, le=10)
+
+
+class FlashcardDraftCard(BaseModel):
+    front: str = Field(min_length=1, max_length=2000)
+    back: str = Field(min_length=1, max_length=4000)
+    hint: str = Field(default='', max_length=2000)
+    citation_indexes: list[int] = Field(min_length=1)
+
+
+class FlashcardDraft(BaseModel):
+    title: str = Field(min_length=3, max_length=255)
+    description: str = Field(default='', max_length=2000)
+    cards: list[FlashcardDraftCard] = Field(min_length=5, max_length=15)
+
+
+class FlashcardCardOutput(BaseModel):
+    id: int
+    front: str
+    back: str
+    hint: str
+    citations: list[QuizCitation]
+
+
+class FlashcardOutput(BaseModel):
+    title: str
+    description: str
+    cards: list[FlashcardCardOutput]
+
+
 def redact_sensitive_text(value: str) -> str:
     return re.sub(r'(?i)\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b', '[redacted-email]', value)
 
@@ -422,6 +459,103 @@ def generate_quiz(request: QuizGenerationRequest) -> dict[str, Any]:
         'retrieval': {
             'query': retrieved['query'],
             'match_count': len(matches),
+            'embedding_model': retrieved['embedding_model'],
+            'collection': retrieved['collection'],
+        },
+        'generation_model': GENERATION_MODEL,
+    }
+
+
+def limit_matches_to_source_pages(matches: list[dict[str, Any]], max_pages: int) -> list[dict[str, Any]]:
+    """Limit context by real source locators instead of inventing a token-based page estimate."""
+    selected: list[dict[str, Any]] = []
+    page_keys: list[tuple[int, str]] = []
+    for match in matches:
+        locator = match.get('source_locator') or 'unknown-location'
+        page_key = (int(match['document_id']), str(locator))
+        if page_key not in page_keys:
+            if len(page_keys) >= max_pages:
+                continue
+            page_keys.append(page_key)
+        selected.append(match)
+    return selected
+
+
+@APP.post('/internal/v1/learning-objects/generate-flashcards', dependencies=[Depends(require_service_token)])
+def generate_flashcards(request: FlashcardGenerationRequest) -> dict[str, Any]:
+    retrieved = search_collection(SearchRequest(
+        course_id=request.course_id,
+        query=request.topic,
+        top_k=request.top_k,
+        document_ids=request.document_ids,
+    ))
+    matches = limit_matches_to_source_pages(retrieved['matches'], request.max_pages)
+    if not matches:
+        raise PipelineError('NO_GROUNDED_CONTEXT', 'No processed chunks matched this flashcard topic.', 'generation', 422)
+
+    context = '\n\n'.join(f'[Source {index}] {match["content"]}' for index, match in enumerate(matches, start=1))
+    instruction = (
+        'Create Vietnamese study flashcards using only the numbered source chunks below.\n'
+        f'- Topic: {request.topic}\n'
+        f'- Card count: {request.card_count} | Difficulty: {request.difficulty}\n'
+        f'- Context is limited to at most {request.max_pages} distinct source pages or locators.\n\n'
+        'REQUIREMENTS:\n'
+        '1. Each card must test one useful concept, definition, theorem, formula, or relationship grounded in the supplied sources.\n'
+        '2. front must be a concise retrieval question or concept prompt; back must be a complete, self-contained answer.\n'
+        '3. hint must help recall without revealing the full answer.\n'
+        '4. Every card must contain valid citation_indexes referencing the supporting [Source] numbers; never invent a source number.\n'
+        '5. Correct malformed technical notation and wrap every mathematical expression in standard LaTeX $...$ or $$...$$.\n'
+        '6. Avoid duplicate cards and return exactly the requested number of cards.\n\n'
+        f'Source chunks:\n{context}'
+    )
+    try:
+        client = gemini_client()
+        response = client.models.generate_content(
+            model=GENERATION_MODEL,
+            contents=instruction,
+            config=types.GenerateContentConfig(response_mime_type='application/json', response_schema=FlashcardDraft.model_json_schema()),
+        )
+        draft = FlashcardDraft.model_validate(json.loads(response.text))
+    except PipelineError:
+        raise
+    except Exception as exc:
+        LOGGER.exception('Gemini flashcard-generation request failed')
+        if is_rate_limited(exc):
+            raise PipelineError('GEMINI_RATE_LIMITED', 'Gemini is temporarily rate limited. Please retry shortly.', 'generation', 429) from exc
+        raise PipelineError('FLASHCARD_GENERATION_FAILED', 'Gemini could not generate valid flashcards.', 'generation', 502) from exc
+
+    if len(draft.cards) != request.card_count:
+        raise PipelineError('FLASHCARD_SCHEMA_INVALID', 'Gemini returned a different number of cards than requested.', 'generation', 502)
+    normalized_fronts = [card.front.strip().casefold() for card in draft.cards]
+    if len(set(normalized_fronts)) != len(normalized_fronts):
+        raise PipelineError('FLASHCARD_SCHEMA_INVALID', 'Gemini returned duplicate flashcards.', 'generation', 502)
+
+    output_cards: list[FlashcardCardOutput] = []
+    for card_index, card in enumerate(draft.cards, start=1):
+        if any(index < 1 or index > len(matches) for index in card.citation_indexes):
+            raise PipelineError('UNGROUNDABLE_CITATION', 'Gemini returned a flashcard citation outside the retrieved source set.', 'generation', 502)
+        selected_indexes = list(dict.fromkeys(card.citation_indexes))
+        citations = [QuizCitation(
+            vector_id=matches[index - 1]['vector_id'],
+            source_locator=matches[index - 1]['source_locator'],
+            document_id=matches[index - 1]['document_id'],
+            document_name=matches[index - 1]['document_name'],
+        ) for index in selected_indexes]
+        output_cards.append(FlashcardCardOutput(
+            id=card_index,
+            front=card.front.strip(),
+            back=card.back.strip(),
+            hint=card.hint.strip(),
+            citations=citations,
+        ))
+
+    output = FlashcardOutput(title=draft.title, description=draft.description, cards=output_cards)
+    return {
+        'flashcards': output.model_dump(),
+        'retrieval': {
+            'query': retrieved['query'],
+            'match_count': len(matches),
+            'max_pages': request.max_pages,
             'embedding_model': retrieved['embedding_model'],
             'collection': retrieved['collection'],
         },

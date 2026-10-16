@@ -69,6 +69,19 @@ class RagService
         ]), 'quiz generation');
     }
 
+    public function generateFlashcards(Course $course, array $parameters): array
+    {
+        return $this->unwrap($this->client(120)->asJson()->post('/internal/v1/learning-objects/generate-flashcards', [
+            'course_id' => $course->id,
+            'topic' => $parameters['topic'],
+            'difficulty' => $parameters['difficulty'],
+            'card_count' => $parameters['card_count'],
+            'document_ids' => array_values($parameters['document_ids'] ?? []),
+            'top_k' => $parameters['top_k'],
+            'max_pages' => $parameters['max_pages'],
+        ]), 'flashcard generation');
+    }
+
     public function deleteDocumentVectors(TeachingDocument $document): void
     {
         $this->unwrap($this->client()->delete('/internal/v1/documents/'.$document->id.'/vectors'), 'vector cleanup');

@@ -398,7 +398,7 @@ Các dòng blocker ở phần 12 là snapshot tại thời điểm lập plan, k
 
 ### Bước tiếp theo bắt buộc trước khi báo PB RAG complete
 
-1. Project lead tạo **Gemini key mới**, đặt `GEMINI_API_KEY=...` chỉ trong `.env`, thay `AI_SERVICE_TOKEN`, rồi `docker compose up --build -d`.
+1. Project lead tạo **Gemini key mới**, đặt `GEMINI_API_KEY=<your-new-key>` trong file `.env` bị Git ignore; không ghi key vào source hoặc tài liệu.
 2. Upload một PDF text-based và DOCX không nhạy cảm; trigger RAG trong Lecturer UI; lưu run ID, trạng thái processed, chunk count, Chroma result, retrieval citations và structured evidence response làm evidence.
 3. Restart `ai`/`chroma`, rerun retrieval; thêm fixtures + tests cho PDF/DOCX/error/filter/delete lifecycle trước Sprint Review.
 

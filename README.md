@@ -1,6 +1,6 @@
 # FLTS — Flipped Learning Teaching System
 
-Repository hiện có các vertical slice đã kiểm chứng cho tài khoản/RBAC, khóa học, tài liệu, xử lý/truy xuất tài liệu và Quiz learning object. Đây chưa phải toàn bộ MVP; Flashcards, analytics và các mục được ghi là chưa triển khai không được xem là hoàn thành.
+Repository hiện có các vertical slice đã kiểm chứng cho tài khoản/RBAC, khóa học, tài liệu, xử lý/truy xuất tài liệu, Quiz và Flashcard learning object. Đây chưa phải toàn bộ MVP; Mindmap, Interactive Slides, persistent spaced repetition, analytics và các mục được ghi là chưa triển khai không được xem là hoàn thành.
 
 Xem [hướng dẫn đọc toàn bộ codebase bằng tiếng Việt](docs/CODEBASE_GUIDE_VI.md) để phân biệt code framework/dependency với code Sprint 1, và để lần theo các luồng login, phân quyền, course và upload.
 
@@ -22,7 +22,13 @@ Lecturer flow: open a course with at least one processed document, select **Tạ
 
 Quiz generation returns `202 Accepted` immediately and is processed by the dedicated `generation-worker`. The UI polls `queued → generating → completed/failed`, offers a safe retry after failure and never exposes internal cURL/provider diagnostics. Document ingestion remains on the separate `queue-worker` queue so a large embedding job cannot sit in front of an interactive Quiz job.
 
-PB25 Flashcards and PB32 Regenerate remain stretch goals and are not implemented. Time limits are stored as Quiz metadata but are not yet enforced by a countdown timer.
+PB25 Flashcards được hoàn thành ngày 16/10/2026 như carry-over từ Sprint 3 sang Sprint 4 Phase 1. Xem [bằng chứng Flashcard vertical slice](docs/SPRINT_4_PHASE1_EVIDENCE.md). PB32 Regenerate chưa được triển khai; time limit vẫn chỉ là metadata Quiz và chưa được countdown cưỡng chế.
+
+## Sprint 4 Phase 1 — Flashcard (16/10/2026)
+
+Lecturer mở thư viện học liệu của một course có document đã processed, chọn tab **Flashcard**, cấu hình topic/difficulty/số thẻ/`max_pages`, rồi tiếp tục làm việc trong khi `generation-worker` xử lý. Kết quả draft có thể xem trước, chỉnh sửa thành version mới và xuất bản. Student đã enroll chỉ nhìn thấy bộ published, có thể lật/chuyển thẻ; đánh dấu “Đã hiểu/Cần ôn lại” hiện chỉ tồn tại trong phiên trình duyệt.
+
+Mindmap và Interactive Slides mới nằm trong kế hoạch, chưa có backend/UI. Không dùng những tab giả để demo như tính năng đã hoàn thành.
 
 After `Copy-Item .env.example .env`, edit the ignored `.env` and set a newly generated `GEMINI_API_KEY`; the key must never be committed. Also set a different high-entropy `AI_SERVICE_TOKEN` for this local stack. Without either value, containers still start, but internal RAG requests intentionally fail instead of using a predictable default or pretending they succeeded.
 

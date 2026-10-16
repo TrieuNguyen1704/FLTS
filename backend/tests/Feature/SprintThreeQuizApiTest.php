@@ -225,7 +225,7 @@ class SprintThreeQuizApiTest extends TestCase
         $response = $this->withToken($lecturerToken)
             ->deleteJson("/api/courses/{$course->id}/learning-objects/{$draft->id}")
             ->assertOk()
-            ->assertJsonPath('message', 'Quiz đã được xóa thành công.');
+            ->assertJsonPath('message', 'Đã xóa học liệu thành công.');
 
         $this->assertDatabaseMissing('learning_objects', ['id' => $draft->id]);
         $this->assertDatabaseMissing('quizzes', ['id' => $quizId]);
