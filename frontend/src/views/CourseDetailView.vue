@@ -26,8 +26,12 @@ const students = ref([])
 const availableStudents = ref([])
 
 // Tab state
-const validTabs = ['overview', 'documents', 'quizzes', 'students']
-const activeTab = ref(validTabs.includes(route.query.tab) ? route.query.tab : 'overview')
+const validTabs = ['overview', 'documents', 'learning-objects', 'quizzes', 'students']
+const activeTab = ref(
+  (route.query.tab === 'quizzes' || route.query.tab === 'learning-objects')
+    ? 'learning-objects'
+    : (validTabs.includes(route.query.tab) ? route.query.tab : 'overview')
+)
 
 function setTab(tab) {
   activeTab.value = tab
@@ -37,11 +41,21 @@ function setTab(tab) {
 watch(
   () => route.query.tab,
   (newTab) => {
-    if (newTab && validTabs.includes(newTab) && newTab !== activeTab.value) {
-      activeTab.value = newTab
+    const resolvedTab = (newTab === 'quizzes' || newTab === 'learning-objects') ? 'learning-objects' : newTab
+    if (resolvedTab && validTabs.includes(resolvedTab) && resolvedTab !== activeTab.value) {
+      activeTab.value = resolvedTab
     }
   }
 )
+
+const learningObjectFilter = ref('all')
+const quizzesCount = computed(() => quizzes.value.filter((o) => o.type === 'quiz').length)
+const flashcardsCount = computed(() => quizzes.value.filter((o) => o.type === 'flashcard').length)
+const filteredLearningObjects = computed(() => {
+  if (learningObjectFilter.value === 'quiz') return quizzes.value.filter((o) => o.type === 'quiz')
+  if (learningObjectFilter.value === 'flashcard') return quizzes.value.filter((o) => o.type === 'flashcard')
+  return quizzes.value
+})
 
 // UI & Form states
 const loading = ref(true)
@@ -178,13 +192,14 @@ async function removeDocument() {
 async function removeQuiz() {
   if (!quizToDelete.value) return
   deletingQuiz.value = true
+  const objectType = quizToDelete.value.type === 'flashcard' ? 'bộ Flashcard' : 'bài kiểm tra Quiz'
   try {
     await learningObjectService.delete(course.value.id, quizToDelete.value.id)
     quizzes.value = quizzes.value.filter((q) => q.id !== quizToDelete.value.id)
-    toast.show('Đã xóa bài kiểm tra.')
+    toast.show(`Đã xóa ${objectType}.`)
     quizToDelete.value = null
   } catch (requestError) {
-    toast.show(requestError.message || 'Không thể xóa bài kiểm tra.', 'error')
+    toast.show(requestError.message || `Không thể xóa ${objectType}.`, 'error')
   } finally {
     deletingQuiz.value = false
   }
@@ -377,7 +392,7 @@ onMounted(loadCourse)
             class="button"
             :to="{ name: 'learning-objects', params: { courseId: course.id } }"
           >
-            Quản lý Quiz
+            Thư viện học liệu
           </RouterLink>
         </div>
       </div>
@@ -402,10 +417,10 @@ onMounted(loadCourse)
       </button>
       <button
         class="course-tab"
-        :class="{ 'course-tab--active': activeTab === 'quizzes' }"
-        @click="setTab('quizzes')"
+        :class="{ 'course-tab--active': activeTab === 'learning-objects' || activeTab === 'quizzes' }"
+        @click="setTab('learning-objects')"
       >
-        Quiz trắc nghiệm
+        Học liệu (Quiz & Flashcard)
         <span class="tab-badge">{{ quizzes.length }}</span>
       </button>
       <button
@@ -426,10 +441,10 @@ onMounted(loadCourse)
           <strong>{{ documents.length }}</strong>
           <small>Tệp PDF/DOC/DOCX đã tải lên</small>
         </article>
-        <article class="summary-card" @click="setTab('quizzes')" style="cursor: pointer;">
-          <span class="summary-card__label">Bài kiểm tra Quiz</span>
+        <article class="summary-card" @click="setTab('learning-objects')" style="cursor: pointer;">
+          <span class="summary-card__label">Học liệu đã tạo</span>
           <strong>{{ quizzes.length }}</strong>
-          <small>Bộ câu hỏi trắc nghiệm</small>
+          <small>{{ quizzesCount }} Quiz · {{ flashcardsCount }} Flashcard</small>
         </article>
         <article class="summary-card" @click="setTab('students')" style="cursor: pointer;">
           <span class="summary-card__label">Sinh viên ghi danh</span>
@@ -535,46 +550,98 @@ onMounted(loadCourse)
       />
     </section>
 
-    <!-- TAB 3: QUIZ TRẮC NGHIỆM -->
-    <section v-else-if="activeTab === 'quizzes'" class="tab-pane">
+    <!-- TAB 3: THƯ VIỆN HỌC LIỆU (QUIZ & FLASHCARD) -->
+    <section v-else-if="activeTab === 'learning-objects' || activeTab === 'quizzes'" class="tab-pane">
       <header class="section-header">
         <div>
-          <h2>Bộ câu hỏi trắc nghiệm (Quiz)</h2>
-          <p>Tạo và quản lý các bài kiểm tra dựa trên nội dung tài liệu giảng dạy đã xử lý.</p>
+          <h2>Thư viện học liệu khóa học</h2>
+          <p>Quản lý các bộ Quiz trắc nghiệm và Flashcard ôn tập được tạo từ giáo trình.</p>
         </div>
-        <RouterLink
-          class="button"
-          :to="{ name: 'learning-objects', params: { courseId: course.id } }"
-        >
-          + Tạo Quiz mới
-        </RouterLink>
+        <div class="header-action-group">
+          <RouterLink
+            class="button button--secondary"
+            :to="{ name: 'learning-objects', params: { courseId: course.id }, query: { type: 'flashcard' } }"
+          >
+            + Tạo Flashcard
+          </RouterLink>
+          <RouterLink
+            class="button"
+            :to="{ name: 'learning-objects', params: { courseId: course.id }, query: { type: 'quiz' } }"
+          >
+            + Tạo Quiz
+          </RouterLink>
+        </div>
       </header>
 
-      <div v-if="quizzes.length" class="learning-object-grid">
-        <article v-for="quiz in quizzes" :key="quiz.id" class="learning-card">
+      <div v-if="quizzes.length" class="lo-filter-bar">
+        <div class="lo-filter-pills" role="tablist" aria-label="Lọc học liệu">
+          <button
+            type="button"
+            class="lo-filter-pill"
+            :class="{ 'lo-filter-pill--active': learningObjectFilter === 'all' }"
+            @click="learningObjectFilter = 'all'"
+          >
+            Tất cả ({{ quizzes.length }})
+          </button>
+          <button
+            type="button"
+            class="lo-filter-pill"
+            :class="{ 'lo-filter-pill--active': learningObjectFilter === 'quiz' }"
+            @click="learningObjectFilter = 'quiz'"
+          >
+            Quiz trắc nghiệm ({{ quizzesCount }})
+          </button>
+          <button
+            type="button"
+            class="lo-filter-pill"
+            :class="{ 'lo-filter-pill--active': learningObjectFilter === 'flashcard' }"
+            @click="learningObjectFilter = 'flashcard'"
+          >
+            Flashcard ôn tập ({{ flashcardsCount }})
+          </button>
+        </div>
+      </div>
+
+      <div v-if="filteredLearningObjects.length" class="learning-object-grid">
+        <article v-for="item in filteredLearningObjects" :key="item.id" class="learning-card">
           <header class="learning-card__header">
-            <span class="learning-card__type">Quiz</span>
-            <span :class="`status-chip status-chip--${quiz.status}`">
-              {{ quiz.status === 'published' ? 'Đã xuất bản' : quiz.status === 'archived' ? 'Đã lưu trữ' : 'Bản nháp' }}
+            <span
+              class="learning-card__type"
+              :class="item.type === 'flashcard' ? 'learning-card__type--flashcard' : 'learning-card__type--quiz'"
+            >
+              {{ item.type === 'flashcard' ? 'Flashcard' : 'Quiz' }}
+            </span>
+            <span :class="`status-chip status-chip--${item.status}`">
+              {{ item.status === 'published' ? 'Đã xuất bản' : item.status === 'archived' ? 'Đã lưu trữ' : 'Bản nháp' }}
             </span>
           </header>
-          <h3>{{ quiz.title }}</h3>
-          <p>{{ quiz.description || 'Bài kiểm tra kiến thức môn học.' }}</p>
+          <h3>{{ item.title }}</h3>
+          <p>{{ item.description || (item.type === 'flashcard' ? 'Bộ thẻ ôn tập kiến thức và định nghĩa.' : 'Bài kiểm tra kiến thức môn học.') }}</p>
           <div class="learning-card__footer">
-            <span v-if="quiz.quiz" class="quiz-spec">
-              {{ quiz.quiz.total_questions || '—' }} câu hỏi | Đạt: {{ quiz.quiz.passing_score }}%
+            <span class="quiz-spec">
+              <template v-if="item.type === 'flashcard'">
+                {{ item.total_cards != null ? item.total_cards : '—' }} thẻ ôn tập
+              </template>
+              <template v-else-if="item.quiz">
+                {{ item.quiz.total_questions || item.total_questions || '—' }} câu hỏi | Đạt: {{ item.quiz.passing_score }}%
+              </template>
+              <template v-else>
+                {{ item.total_questions || '—' }} câu hỏi
+              </template>
             </span>
             <div class="table-actions">
               <RouterLink
                 class="button button--secondary button--small"
-                :to="{ name: 'quiz-editor', params: { courseId: course.id, objectId: quiz.id } }"
+                :to="item.type === 'flashcard'
+                  ? { name: 'flashcard-editor', params: { courseId: course.id, objectId: item.id } }
+                  : { name: 'quiz-editor', params: { courseId: course.id, objectId: item.id } }"
               >
                 Chỉnh sửa & Xem
               </RouterLink>
               <BaseButton
                 variant="danger-ghost"
                 class="button--small"
-                @click="quizToDelete = quiz"
+                @click="quizToDelete = item"
               >
                 Xóa
               </BaseButton>
@@ -584,10 +651,18 @@ onMounted(loadCourse)
       </div>
 
       <AppState
+        v-else-if="quizzes.length && !filteredLearningObjects.length"
+        title="Không tìm thấy học liệu"
+        :message="`Không có học liệu nào thuộc danh mục ${learningObjectFilter === 'quiz' ? 'Quiz' : 'Flashcard'}.`"
+        action-label="Xem tất cả học liệu"
+        @action="learningObjectFilter = 'all'"
+      />
+
+      <AppState
         v-else
-        title="Chưa có Quiz nào"
-        message="Khóa học chưa có bài kiểm tra trắc nghiệm nào. Hãy tạo Quiz đầu tiên từ các tài liệu đã xử lý."
-        action-label="Tạo Quiz ngay"
+        title="Chưa có học liệu nào"
+        message="Khóa học chưa có bài Quiz hay bộ Flashcard nào. Hãy tạo học liệu đầu tiên từ các tài liệu đã xử lý."
+        action-label="Tạo học liệu ngay"
         @action="router.push({ name: 'learning-objects', params: { courseId: course.id } })"
       />
     </section>
@@ -743,17 +818,17 @@ onMounted(loadCourse)
     </div>
   </AppModal>
 
-  <!-- MODAL: XÓA QUIZ -->
+  <!-- MODAL: XÓA HỌC LIỆU -->
   <AppModal
     v-model="quizToDelete"
-    title="Xác nhận xóa bài kiểm tra (Quiz)"
-    confirm-label="Xóa bài kiểm tra"
+    :title="quizToDelete?.type === 'flashcard' ? 'Xác nhận xóa bộ Flashcard' : 'Xác nhận xóa bài kiểm tra (Quiz)'"
+    :confirm-label="quizToDelete?.type === 'flashcard' ? 'Xóa bộ Flashcard' : 'Xóa bài kiểm tra'"
     :danger="true"
     :loading="deletingQuiz"
     @confirm="removeQuiz"
   >
     <p>
-      Bạn có chắc chắn muốn xóa bài kiểm tra <strong>{{ quizToDelete?.title }}</strong>? Thao tác này sẽ xóa vĩnh viễn toàn bộ câu hỏi, đáp án và lịch sử làm bài liên quan của sinh viên.
+      Bạn có chắc chắn muốn xóa {{ quizToDelete?.type === 'flashcard' ? 'bộ Flashcard' : 'bài kiểm tra' }} <strong>{{ quizToDelete?.title }}</strong>? Thao tác này sẽ xóa vĩnh viễn và không thể hoàn tác.
     </p>
   </AppModal>
 
@@ -1069,6 +1144,60 @@ onMounted(loadCourse)
   margin-top: auto;
   padding-top: 14px;
   border-top: 1px solid var(--cds-border-light);
+}
+
+.header-action-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.lo-filter-bar {
+  margin-bottom: 6px;
+}
+
+.lo-filter-pills {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.lo-filter-pill {
+  padding: 6px 14px;
+  border: 1px solid var(--cds-border);
+  border-radius: var(--cds-radius-pill);
+  background: #ffffff;
+  color: var(--cds-text-secondary);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.lo-filter-pill:hover {
+  background: var(--cds-bg-subtle);
+  color: var(--cds-text-primary);
+  border-color: #cbd5e1;
+}
+
+.lo-filter-pill--active {
+  background: var(--cds-blue-tint);
+  color: var(--cds-blue-primary);
+  border-color: var(--cds-blue-primary);
+  font-weight: 700;
+}
+
+.learning-card__type--flashcard {
+  color: #7c3aed !important;
+  background: #f5f3ff !important;
+  border-color: #ddd6fe !important;
+}
+
+.learning-card__type--quiz {
+  color: var(--cds-blue-primary) !important;
+  background: var(--cds-blue-tint) !important;
+  border-color: #bfdbfe !important;
 }
 
 .quiz-spec {

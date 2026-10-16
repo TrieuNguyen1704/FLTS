@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppModal from '../components/AppModal.vue'
 import AppState from '../components/AppState.vue'
@@ -31,6 +31,26 @@ const flashcardForm = reactive({ title: '', topic: '', difficulty: 'medium', car
 const processedDocuments = computed(() => documents.value.filter((document) => document.processing_status === 'processed'))
 const visibleObjects = computed(() => objects.value.filter((object) => object.type === activeType.value))
 const hasPendingGeneration = computed(() => objects.value.some((object) => ['queued', 'generating'].includes(object.generation?.status)))
+
+function switchType(type) {
+  activeType.value = type
+  router.replace({ query: { ...route.query, type } })
+}
+
+watch(
+  () => route.query.type,
+  (newType) => {
+    if (newType && ['quiz', 'flashcard'].includes(newType) && newType !== activeType.value) {
+      activeType.value = newType
+    }
+  }
+)
+
+function canOpenEditor(object) {
+  const genStatus = object.generation?.status
+  if (genStatus === 'queued' || genStatus === 'generating' || genStatus === 'failed') return false
+  return true
+}
 
 function typeLabel(type) { return type === 'flashcard' ? 'Flashcard' : 'Quiz' }
 function editorRoute(object) {
@@ -156,8 +176,8 @@ onBeforeUnmount(() => window.clearInterval(pollTimer))
     </section>
 
     <div class="learning-tabs" role="tablist" aria-label="Loại học liệu">
-      <button :class="{ active: activeType === 'quiz' }" role="tab" @click="activeType = 'quiz'">Quiz</button>
-      <button :class="{ active: activeType === 'flashcard' }" role="tab" @click="activeType = 'flashcard'">Flashcard</button>
+      <button :class="{ active: activeType === 'quiz' }" role="tab" @click="switchType('quiz')">Quiz trắc nghiệm</button>
+      <button :class="{ active: activeType === 'flashcard' }" role="tab" @click="switchType('flashcard')">Flashcard ôn tập</button>
     </div>
 
     <section class="learning-panel">
@@ -205,7 +225,7 @@ onBeforeUnmount(() => window.clearInterval(pollTimer))
           <h3>{{ object.title }}</h3><p>{{ object.description || `Chưa có mô tả cho ${typeLabel(object.type)} này.` }}</p>
           <p v-if="object.generation?.status === 'failed'" class="form-error">{{ object.generation.error_message }}</p>
           <div class="table-actions">
-            <RouterLink v-if="object.generation?.status === 'completed'" class="button button--secondary" :to="editorRoute(object)">Mở {{ typeLabel(object.type) }}</RouterLink>
+            <RouterLink v-if="canOpenEditor(object)" class="button button--secondary" :to="editorRoute(object)">Mở {{ typeLabel(object.type) }}</RouterLink>
             <BaseButton v-if="object.generation?.status === 'failed'" variant="secondary" :loading="retryingId === object.id" @click="retryGeneration(object)">Thử lại</BaseButton>
             <BaseButton variant="danger-ghost" @click="objectToDelete = object">Xóa</BaseButton>
           </div>

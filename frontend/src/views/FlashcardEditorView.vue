@@ -97,13 +97,33 @@ onMounted(load)
   <template v-else>
     <section class="page-heading editor-heading">
       <div>
-        <span class="eyebrow">FLASHCARD · PHIÊN BẢN {{ object.current_version }}</span>
+        <span class="eyebrow">HỌC LIỆU FLASHCARD</span>
         <h1>{{ object.title }}</h1>
         <p>Kiểm tra nội dung, công thức và nguồn dẫn trước khi xuất bản.</p>
       </div>
       <div class="table-actions">
+        <span class="version-badge">Phiên bản {{ object.current_version }}</span>
         <span class="status-chip" :class="`status-chip--${object.status}`">{{ statusLabel(object.status) }}</span>
-        <BaseButton variant="secondary" @click="preview = !preview">{{ preview ? 'Quay lại biên tập' : 'Xem trước' }}</BaseButton>
+
+        <div class="editor-mode-toggle" role="group" aria-label="Chế độ xem">
+          <button
+            type="button"
+            class="mode-toggle-btn"
+            :class="{ 'mode-toggle-btn--active': !preview }"
+            @click="preview = false"
+          >
+            Biên tập
+          </button>
+          <button
+            type="button"
+            class="mode-toggle-btn"
+            :class="{ 'mode-toggle-btn--active': preview }"
+            @click="preview = true"
+          >
+            Xem trước
+          </button>
+        </div>
+
         <BaseButton v-if="object.status === 'draft'" :loading="publishing" @click="publish">Phê duyệt và xuất bản</BaseButton>
         <BaseButton v-if="object.status !== 'archived'" variant="secondary" @click="archive">Lưu trữ</BaseButton>
       </div>
@@ -160,5 +180,40 @@ onMounted(load)
 .flashcard-editor__preview { margin-top: 14px; padding: 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; }
 .flashcard-editor__preview small { display: block; margin-bottom: 6px; color: var(--cds-text-secondary); font-weight: 700; }
 .editor-footer { display: flex; justify-content: space-between; }
+.editor-mode-toggle {
+  display: inline-flex;
+  padding: 3px;
+  background: var(--cds-bg-subtle, #f1f5f9);
+  border: 1px solid var(--cds-border, #cbd5e1);
+  border-radius: 8px;
+}
+.mode-toggle-btn {
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--cds-text-secondary);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.mode-toggle-btn--active {
+  background: #ffffff;
+  color: var(--cds-blue-primary);
+  font-weight: 700;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+.version-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  background: var(--cds-bg-subtle, #f1f5f9);
+  border: 1px solid var(--cds-border, #cbd5e1);
+  border-radius: 4px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--cds-text-secondary);
+}
 @media (max-width: 760px) { .editor-metadata, .flashcard-editor__columns, .flashcard-editor__preview { grid-template-columns: 1fr; } }
 </style>

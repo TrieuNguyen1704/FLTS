@@ -20,7 +20,7 @@ const navigation = computed(() => {
         icon: 'dashboard',
       },
       {
-        label: 'Khóa học',
+        label: 'Khóa học & Học liệu',
         to: { name: 'course-management' },
         icon: 'book',
       },
