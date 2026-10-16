@@ -130,6 +130,21 @@ class SprintFourFlashcardApiTest extends TestCase
         Queue::assertPushed(GenerateFlashcardLearningObject::class, fn ($job) => $job->runId === $retry->json('learning_object.generation.id'));
     }
 
+    public function test_background_tasks_provides_direct_flashcard_editor_url_when_completed(): void
+    {
+        [, , $course, $lecturerToken] = $this->courseActors();
+        $object = $this->createDraft($course, $lecturerToken);
+
+        $res = $this->withToken($lecturerToken)->getJson('/api/background-tasks');
+        $res->assertOk();
+        $tasks = $res->json('tasks');
+        $this->assertNotEmpty($tasks);
+        $flashcardTask = collect($tasks)->firstWhere('type', 'flashcard_generation');
+        $this->assertNotNull($flashcardTask);
+        $this->assertSame('completed', $flashcardTask['status']);
+        $this->assertSame("/lecturer/courses/{$course->id}/flashcards/{$object->id}", $flashcardTask['target_url']);
+    }
+
     private function courseActors(): array
     {
         $lecturer = User::create(['name' => 'Lecturer', 'email' => 'lecturer4@flts.test', 'password' => bcrypt('Password123!'), 'role' => 'lecturer']);

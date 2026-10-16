@@ -100,7 +100,13 @@ class BackgroundTaskController
                     'error_message' => $run->error_message,
                     'retryable' => $status === 'failed' && $lo
                         && ($isFlashcard ? !$lo->latestVersion : !$lo->quiz),
-                    'target_url' => $course ? "/lecturer/courses/{$course->id}/learning-objects" : null,
+                    'target_url' => $course
+                        ? ($status === 'completed' && $lo
+                            ? ($isFlashcard
+                                ? "/lecturer/courses/{$course->id}/flashcards/{$lo->id}"
+                                : "/lecturer/courses/{$course->id}/learning-objects/{$lo->id}")
+                            : "/lecturer/courses/{$course->id}/learning-objects?type=" . ($isFlashcard ? 'flashcard' : 'quiz'))
+                        : null,
                 ];
             });
 

@@ -12,6 +12,7 @@ const router = useRouter()
 const courses = ref([])
 const documentCount = ref(0)
 const quizCount = ref(0)
+const flashcardCount = ref(0)
 const loading = ref(true)
 const error = ref('')
 const recentCourses = computed(() => courses.value.slice(0, 3))
@@ -21,12 +22,14 @@ async function loadDashboard() {
   error.value = ''
   try {
     courses.value = (await courseService.list()).courses
-    const [documents, quizzes] = await Promise.all([
+    const [documents, learningObjectsResults] = await Promise.all([
       Promise.all(courses.value.map((course) => documentService.list(course.id))),
       Promise.all(courses.value.map((course) => learningObjectService.list(course.id))),
     ])
     documentCount.value = documents.reduce((total, result) => total + result.documents.length, 0)
-    quizCount.value = quizzes.reduce((total, result) => total + (result.learning_objects?.length || 0), 0)
+    const allLearningObjects = learningObjectsResults.flatMap((result) => result.learning_objects || [])
+    quizCount.value = allLearningObjects.filter((item) => item.type === 'quiz').length
+    flashcardCount.value = allLearningObjects.filter((item) => item.type === 'flashcard').length
   } catch (requestError) {
     error.value = requestError.message || 'Không thể tải dữ liệu bảng điều khiển.'
   } finally {
@@ -42,7 +45,7 @@ onMounted(loadDashboard)
     <div>
       <span class="eyebrow">KHÔNG GIAN GIẢNG VIÊN</span>
       <h1>Tổng quan</h1>
-      <p>Theo dõi tiến độ, tài liệu học tập và bài kiểm tra Quiz trong các khóa học bạn phụ trách.</p>
+      <p>Theo dõi tiến độ, tài liệu học tập, bài kiểm tra Quiz và Flashcard ôn tập trong các khóa học bạn phụ trách.</p>
     </div>
     <BaseButton @click="router.push({ name: 'course-management' })">
       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -54,7 +57,7 @@ onMounted(loadDashboard)
   </section>
 
   <section v-if="loading" class="summary-grid">
-    <div v-for="index in 3" :key="index" class="summary-card skeleton" />
+    <div v-for="index in 4" :key="index" class="summary-card skeleton" />
   </section>
 
   <template v-else-if="!error">
@@ -102,6 +105,20 @@ onMounted(loadDashboard)
         </div>
         <strong>{{ quizCount }}</strong>
         <small>Bộ câu hỏi trắc nghiệm tự động</small>
+      </article>
+
+      <article class="summary-card">
+        <div class="summary-card__header">
+          <span class="summary-card__label">Flashcard ôn tập</span>
+          <div class="summary-card__icon-box">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="4" width="16" height="12" rx="2" />
+              <path d="M6 20h14a2 2 0 0 0 2-2V8" />
+            </svg>
+          </div>
+        </div>
+        <strong>{{ flashcardCount }}</strong>
+        <small>Bộ thẻ ghi nhớ thuật ngữ</small>
       </article>
     </section>
 
