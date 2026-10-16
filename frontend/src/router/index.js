@@ -16,6 +16,10 @@ import StudentCourseView from '../views/StudentCourseView.vue'
 import QuizAttemptView from '../views/QuizAttemptView.vue'
 import FlashcardEditorView from '../views/FlashcardEditorView.vue'
 import StudentFlashcardView from '../views/StudentFlashcardView.vue'
+import MindmapEditorView from '../views/MindmapEditorView.vue'
+import SlideEditorView from '../views/SlideEditorView.vue'
+import StudentMindmapView from '../views/StudentMindmapView.vue'
+import StudentSlideView from '../views/StudentSlideView.vue'
 
 const routes = [
   { path: '/', redirect: () => authStore.role.value === 'student' ? '/student/dashboard' : authStore.role.value === 'admin' ? '/admin/dashboard' : '/lecturer/dashboard' },
@@ -29,10 +33,14 @@ const routes = [
   { path: '/lecturer/courses/:courseId/learning-objects', name: 'learning-objects', component: LearningObjectsView, meta: { requiresAuth: true, roles: ['lecturer'] } },
   { path: '/lecturer/courses/:courseId/learning-objects/:objectId', name: 'quiz-editor', component: QuizEditorView, meta: { requiresAuth: true, roles: ['lecturer'] } },
   { path: '/lecturer/courses/:courseId/flashcards/:objectId', name: 'flashcard-editor', component: FlashcardEditorView, meta: { requiresAuth: true, roles: ['lecturer'] } },
+  { path: '/lecturer/courses/:courseId/mindmaps/:objectId', name: 'mindmap-editor', component: MindmapEditorView, meta: { requiresAuth: true, roles: ['lecturer'] } },
+  { path: '/lecturer/courses/:courseId/slides/:objectId', name: 'slide-editor', component: SlideEditorView, meta: { requiresAuth: true, roles: ['lecturer'] } },
   { path: '/student/dashboard', name: 'student-dashboard', component: StudentDashboardView, meta: { requiresAuth: true, roles: ['student'] } },
   { path: '/student/courses/:courseId', name: 'student-course', component: StudentCourseView, meta: { requiresAuth: true, roles: ['student'] } },
   { path: '/student/courses/:courseId/quizzes/:objectId', name: 'quiz-attempt', component: QuizAttemptView, meta: { requiresAuth: true, roles: ['student'] } },
   { path: '/student/courses/:courseId/flashcards/:objectId', name: 'student-flashcards', component: StudentFlashcardView, meta: { requiresAuth: true, roles: ['student'] } },
+  { path: '/student/courses/:courseId/mindmaps/:objectId', name: 'student-mindmap', component: StudentMindmapView, meta: { requiresAuth: true, roles: ['student'] } },
+  { path: '/student/courses/:courseId/slides/:objectId', name: 'student-slides', component: StudentSlideView, meta: { requiresAuth: true, roles: ['student'] } },
   { path: '/admin/dashboard', name: 'admin-dashboard', component: AdminDashboardView, meta: { requiresAuth: true, roles: ['admin'] } },
   { path: '/access-unavailable', name: 'access-unavailable', component: AccessUnavailableView, meta: { requiresAuth: true } },
   { path: '/:pathMatch(.*)*', name: 'not-found', component: NotFoundView },

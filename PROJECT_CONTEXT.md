@@ -1234,3 +1234,13 @@ This records implementation and local runtime evidence on branch `feature/sprint
 - Một Gemini key thật tồn tại trong `docs/SPRINT_2_EXECUTION_PLAN.md` từ lịch sử trước Phase 1 đã được thay bằng placeholder. Vì secret từng nằm trong file theo dõi bởi Git, project lead phải rotate key tại Google AI Studio và chỉ cập nhật `.env` local.
 - Evidence chi tiết: `docs/SPRINT_4_PHASE1_EVIDENCE.md`.
 
+## 37. Sprint 4 Mindmap & Interactive Slides vertical slices — 2026-10-16
+
+- PB26 / US-17 và PB27 / US-18 đã được triển khai trên branch `feature/sprint4-mindmap-and-slides`; đây là implementation checkpoint có code/test/E2E, chưa thay thế PR review hoặc xác nhận Sprint của nhóm.
+- FastAPI thêm hai structured-generation endpoint. Gemini chỉ trả `citation_indexes`; FastAPI map sang `vector_id`, `document_id`, `document_name`, `source_locator` từ tập Chroma đã retrieve và giới hạn bởi `course_id`, `document_ids`, `top_k`, `max_pages`.
+- Mindmap node IDs và Markdown outline do server tạo từ cây đã validate. Laravel không cho request edit thay cấu trúc/citation; chỉ label được hiệu đính. Slide citations cũng được bảo toàn từ snapshot server khi Lecturer sửa title, bullets và speaker notes.
+- Laravel thêm hai queue job trên queue `generation`, UUID idempotency, retry, version snapshot, draft/published/archived, Background Task Center target URL, owner/enrollment RBAC. Student chỉ thấy published content; speaker notes bị loại khỏi Student API response.
+- Vue thêm đủ bốn tab học liệu, `MindmapViewer` (SVG zoom/pan/fold/KaTeX/citation), `SlidePlayer` (navigation/keyboard/progress/fullscreen/notes), hai editor và hai Student view. Course Detail lọc cả Quiz/Flashcard/Mindmap/Slide.
+- E2E thật trên Course 4/Document 5 tạo Mindmap ID 11 và Slide ID 12, sau đó publish; Student workspace nhìn thấy và mở được cả hai. Gemini từng trả 503 high demand; queue retry hoạt động. Recursive Mindmap output từng có null placeholders và đã được chuẩn hóa trước Pydantic validation.
+- Sau thay đổi: PHPUnit 47 tests / 314 assertions; Pytest 33 tests; Vite build 98 modules; 8 container Up; Chroma vẫn 645 vectors. Chi tiết tại `docs/SPRINT_4_MINDMAP_SLIDES_EVIDENCE.md`.
+

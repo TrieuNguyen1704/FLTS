@@ -51,11 +51,19 @@ watch(
 const learningObjectFilter = ref('all')
 const quizzesCount = computed(() => quizzes.value.filter((o) => o.type === 'quiz').length)
 const flashcardsCount = computed(() => quizzes.value.filter((o) => o.type === 'flashcard').length)
+const mindmapsCount = computed(() => quizzes.value.filter((o) => o.type === 'mindmap').length)
+const slidesCount = computed(() => quizzes.value.filter((o) => o.type === 'slide').length)
 const filteredLearningObjects = computed(() => {
-  if (learningObjectFilter.value === 'quiz') return quizzes.value.filter((o) => o.type === 'quiz')
-  if (learningObjectFilter.value === 'flashcard') return quizzes.value.filter((o) => o.type === 'flashcard')
+  if (learningObjectFilter.value !== 'all') return quizzes.value.filter((o) => o.type === learningObjectFilter.value)
   return quizzes.value
 })
+const typeLabel = (type) => ({ quiz: 'Quiz', flashcard: 'Flashcard', mindmap: 'Mindmap', slide: 'Slide' })[type] || 'Học liệu'
+const typeDescription = (type) => ({ quiz: 'Bài kiểm tra kiến thức môn học.', flashcard: 'Bộ thẻ ôn tập kiến thức và định nghĩa.', mindmap: 'Sơ đồ hệ thống hóa kiến thức.', slide: 'Bài giảng tương tác trước giờ học.' })[type]
+const typeSpec = (item) => item.type === 'flashcard' ? `${item.total_cards ?? '—'} thẻ` : item.type === 'mindmap' ? `${item.total_nodes ?? '—'} nút` : item.type === 'slide' ? `${item.total_slides ?? '—'} slide` : `${item.total_questions ?? '—'} câu hỏi`
+function objectEditorRoute(item) {
+  const names = { quiz: 'quiz-editor', flashcard: 'flashcard-editor', mindmap: 'mindmap-editor', slide: 'slide-editor' }
+  return { name: names[item.type], params: { courseId: course.value.id, objectId: item.id } }
+}
 
 // UI & Form states
 const loading = ref(true)
@@ -192,7 +200,7 @@ async function removeDocument() {
 async function removeQuiz() {
   if (!quizToDelete.value) return
   deletingQuiz.value = true
-  const objectType = quizToDelete.value.type === 'flashcard' ? 'bộ Flashcard' : 'bài kiểm tra Quiz'
+  const objectType = typeLabel(quizToDelete.value.type)
   try {
     await learningObjectService.delete(course.value.id, quizToDelete.value.id)
     quizzes.value = quizzes.value.filter((q) => q.id !== quizToDelete.value.id)
@@ -420,7 +428,7 @@ onMounted(loadCourse)
         :class="{ 'course-tab--active': activeTab === 'learning-objects' || activeTab === 'quizzes' }"
         @click="setTab('learning-objects')"
       >
-        Học liệu (Quiz & Flashcard)
+        Thư viện học liệu
         <span class="tab-badge">{{ quizzes.length }}</span>
       </button>
       <button
@@ -444,7 +452,7 @@ onMounted(loadCourse)
         <article class="summary-card" @click="setTab('learning-objects')" style="cursor: pointer;">
           <span class="summary-card__label">Học liệu đã tạo</span>
           <strong>{{ quizzes.length }}</strong>
-          <small>{{ quizzesCount }} Quiz · {{ flashcardsCount }} Flashcard</small>
+          <small>{{ quizzes.length }} học liệu thuộc 4 định dạng</small>
         </article>
         <article class="summary-card" @click="setTab('students')" style="cursor: pointer;">
           <span class="summary-card__label">Sinh viên ghi danh</span>
@@ -555,7 +563,7 @@ onMounted(loadCourse)
       <header class="section-header">
         <div>
           <h2>Thư viện học liệu khóa học</h2>
-          <p>Quản lý các bộ Quiz trắc nghiệm và Flashcard ôn tập được tạo từ giáo trình.</p>
+          <p>Quản lý Quiz, Flashcard, Mindmap và Slide được tạo từ giáo trình.</p>
         </div>
         <div class="header-action-group">
           <RouterLink
@@ -570,6 +578,8 @@ onMounted(loadCourse)
           >
             + Tạo Quiz
           </RouterLink>
+          <RouterLink class="button button--secondary" :to="{ name: 'learning-objects', params: { courseId: course.id }, query: { type: 'mindmap' } }">+ Tạo Mindmap</RouterLink>
+          <RouterLink class="button button--secondary" :to="{ name: 'learning-objects', params: { courseId: course.id }, query: { type: 'slide' } }">+ Tạo Slide</RouterLink>
         </div>
       </header>
 
@@ -599,6 +609,8 @@ onMounted(loadCourse)
           >
             Flashcard ôn tập ({{ flashcardsCount }})
           </button>
+          <button type="button" class="lo-filter-pill" :class="{ 'lo-filter-pill--active': learningObjectFilter === 'mindmap' }" @click="learningObjectFilter = 'mindmap'">Mindmap ({{ mindmapsCount }})</button>
+          <button type="button" class="lo-filter-pill" :class="{ 'lo-filter-pill--active': learningObjectFilter === 'slide' }" @click="learningObjectFilter = 'slide'">Slides ({{ slidesCount }})</button>
         </div>
       </div>
 
@@ -607,21 +619,22 @@ onMounted(loadCourse)
           <header class="learning-card__header">
             <span
               class="learning-card__type"
-              :class="item.type === 'flashcard' ? 'learning-card__type--flashcard' : 'learning-card__type--quiz'"
+              :class="`learning-card__type--${item.type}`"
             >
-              {{ item.type === 'flashcard' ? 'Flashcard' : 'Quiz' }}
+              {{ typeLabel(item.type) }}
             </span>
             <span :class="`status-chip status-chip--${item.status}`">
               {{ item.status === 'published' ? 'Đã xuất bản' : item.status === 'archived' ? 'Đã lưu trữ' : 'Bản nháp' }}
             </span>
           </header>
           <h3>{{ item.title }}</h3>
-          <p>{{ item.description || (item.type === 'flashcard' ? 'Bộ thẻ ôn tập kiến thức và định nghĩa.' : 'Bài kiểm tra kiến thức môn học.') }}</p>
+          <p>{{ item.description || typeDescription(item.type) }}</p>
           <div class="learning-card__footer">
             <span class="quiz-spec">
               <template v-if="item.type === 'flashcard'">
                 {{ item.total_cards != null ? item.total_cards : '—' }} thẻ ôn tập
               </template>
+              <template v-else-if="item.type === 'mindmap' || item.type === 'slide'">{{ typeSpec(item) }}</template>
               <template v-else-if="item.quiz">
                 {{ item.quiz.total_questions || item.total_questions || '—' }} câu hỏi | Đạt: {{ item.quiz.passing_score }}%
               </template>
@@ -632,9 +645,7 @@ onMounted(loadCourse)
             <div class="table-actions">
               <RouterLink
                 class="button button--secondary button--small"
-                :to="item.type === 'flashcard'
-                  ? { name: 'flashcard-editor', params: { courseId: course.id, objectId: item.id } }
-                  : { name: 'quiz-editor', params: { courseId: course.id, objectId: item.id } }"
+                :to="objectEditorRoute(item)"
               >
                 Chỉnh sửa & Xem
               </RouterLink>
@@ -653,7 +664,7 @@ onMounted(loadCourse)
       <AppState
         v-else-if="quizzes.length && !filteredLearningObjects.length"
         title="Không tìm thấy học liệu"
-        :message="`Không có học liệu nào thuộc danh mục ${learningObjectFilter === 'quiz' ? 'Quiz' : 'Flashcard'}.`"
+        :message="`Không có học liệu nào thuộc danh mục ${typeLabel(learningObjectFilter)}.`"
         action-label="Xem tất cả học liệu"
         @action="learningObjectFilter = 'all'"
       />
@@ -661,7 +672,7 @@ onMounted(loadCourse)
       <AppState
         v-else
         title="Chưa có học liệu nào"
-        message="Khóa học chưa có bài Quiz hay bộ Flashcard nào. Hãy tạo học liệu đầu tiên từ các tài liệu đã xử lý."
+        message="Khóa học chưa có học liệu nào. Hãy tạo học liệu đầu tiên từ các tài liệu đã xử lý."
         action-label="Tạo học liệu ngay"
         @action="router.push({ name: 'learning-objects', params: { courseId: course.id } })"
       />
@@ -821,14 +832,14 @@ onMounted(loadCourse)
   <!-- MODAL: XÓA HỌC LIỆU -->
   <AppModal
     v-model="quizToDelete"
-    :title="quizToDelete?.type === 'flashcard' ? 'Xác nhận xóa bộ Flashcard' : 'Xác nhận xóa bài kiểm tra (Quiz)'"
-    :confirm-label="quizToDelete?.type === 'flashcard' ? 'Xóa bộ Flashcard' : 'Xóa bài kiểm tra'"
+    :title="`Xác nhận xóa ${typeLabel(quizToDelete?.type)}`"
+    :confirm-label="`Xóa ${typeLabel(quizToDelete?.type)}`"
     :danger="true"
     :loading="deletingQuiz"
     @confirm="removeQuiz"
   >
     <p>
-      Bạn có chắc chắn muốn xóa {{ quizToDelete?.type === 'flashcard' ? 'bộ Flashcard' : 'bài kiểm tra' }} <strong>{{ quizToDelete?.title }}</strong>? Thao tác này sẽ xóa vĩnh viễn và không thể hoàn tác.
+      Bạn có chắc chắn muốn xóa <strong>{{ quizToDelete?.title }}</strong>? Thao tác này sẽ xóa vĩnh viễn và không thể hoàn tác.
     </p>
   </AppModal>
 
@@ -1198,6 +1209,18 @@ onMounted(loadCourse)
   color: var(--cds-blue-primary) !important;
   background: var(--cds-blue-tint) !important;
   border-color: #bfdbfe !important;
+}
+
+.learning-card__type--mindmap {
+  color: #047857 !important;
+  background: #ecfdf5 !important;
+  border-color: #a7f3d0 !important;
+}
+
+.learning-card__type--slide {
+  color: #c2410c !important;
+  background: #fff7ed !important;
+  border-color: #fed7aa !important;
 }
 
 .quiz-spec {

@@ -1,6 +1,6 @@
 # FLTS — Flipped Learning Teaching System
 
-Repository hiện có các vertical slice đã kiểm chứng cho tài khoản/RBAC, khóa học, tài liệu, xử lý/truy xuất tài liệu, Quiz và Flashcard learning object. Đây chưa phải toàn bộ MVP; Mindmap, Interactive Slides, persistent spaced repetition, analytics và các mục được ghi là chưa triển khai không được xem là hoàn thành.
+Repository hiện có các vertical slice đã kiểm chứng cho tài khoản/RBAC, khóa học, tài liệu, xử lý/truy xuất tài liệu, Quiz, Flashcard, Mindmap và Interactive Slides. Đây chưa phải toàn bộ MVP; persistent spaced repetition, analytics, export học liệu và các mục được ghi là chưa triển khai không được xem là hoàn thành.
 
 Xem [hướng dẫn đọc toàn bộ codebase bằng tiếng Việt](docs/CODEBASE_GUIDE_VI.md) để phân biệt code framework/dependency với code Sprint 1, và để lần theo các luồng login, phân quyền, course và upload.
 
@@ -28,7 +28,7 @@ PB25 Flashcards được hoàn thành ngày 16/10/2026 như carry-over từ Spri
 
 Lecturer mở thư viện học liệu của một course có document đã processed, chọn tab **Flashcard**, cấu hình topic/difficulty/số thẻ/`max_pages`, rồi tiếp tục làm việc trong khi `generation-worker` xử lý. Kết quả draft có thể xem trước, chỉnh sửa thành version mới và xuất bản. Student đã enroll chỉ nhìn thấy bộ published, có thể lật/chuyển thẻ; đánh dấu “Đã hiểu/Cần ôn lại” hiện chỉ tồn tại trong phiên trình duyệt.
 
-Mindmap và Interactive Slides mới nằm trong kế hoạch, chưa có backend/UI. Không dùng những tab giả để demo như tính năng đã hoàn thành.
+Mindmap và Interactive Slides đã có vertical slice thật: Lecturer tạo bất đồng bộ từ tài liệu processed, review/edit/publish; Student đã enrolled xem bản published bằng sơ đồ tương tác hoặc trình chiếu. Xem [bằng chứng Sprint 4 Mindmap/Slides](docs/SPRINT_4_MINDMAP_SLIDES_EVIDENCE.md). Generation phụ thuộc Gemini nên có thể gặp tải cao; dùng trạng thái tác vụ và nút thử lại, không chờ giữ request trình duyệt.
 
 After `Copy-Item .env.example .env`, edit the ignored `.env` and set a newly generated `GEMINI_API_KEY`; the key must never be committed. Also set a different high-entropy `AI_SERVICE_TOKEN` for this local stack. Without either value, containers still start, but internal RAG requests intentionally fail instead of using a predictable default or pretending they succeeded.
 

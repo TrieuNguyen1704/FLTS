@@ -166,20 +166,20 @@ flowchart TD
 - [x] Viết kiểm thử tự động: Pytest cho Flashcard generator, PHPUnit cho Flashcard API.
 
 ### 📅 Tuần 2 (30/10 – 05/11/2026): Mindmap / Sơ đồ tư duy Phân cấp
-- [ ] Xây dựng Prompt phân tích cây tri thức và Endpoint sinh Mindmap JSON tại `ai-service/main.py`.
-- [ ] Xây dựng Job Laravel `GenerateMindmapLearningObject`.
-- [ ] Xây dựng component `MindmapViewer.vue` hiển thị cây sơ đồ tư duy tương tác: Thu phóng, kéo thả, gấp/mở nhánh, render công thức toán KaTeX.
-- [ ] Tích hợp tính năng chỉnh sửa nhánh sơ đồ tư duy cho Giảng viên.
+- [x] Xây dựng Prompt phân tích cây tri thức và Endpoint sinh Mindmap JSON tại `ai-service/main.py`.
+- [x] Xây dựng Job Laravel `GenerateMindmapLearningObject`.
+- [x] Xây dựng component `MindmapViewer.vue` hiển thị cây sơ đồ tư duy tương tác: Thu phóng, kéo thả, gấp/mở nhánh, render công thức toán KaTeX.
+- [x] Tích hợp tính năng chỉnh sửa nhãn nút sơ đồ tư duy cho Giảng viên; cấu trúc/citation được backend bảo toàn.
 
 ### 📅 Tuần 3 (06/11 – 12/11/2026): Interactive Slides (Bài giảng tương tác)
-- [ ] Xây dựng Endpoint sinh bộ Slide bài giảng kèm Speaker Notes tại `ai-service/main.py`.
-- [ ] Xây dựng Job Laravel `GenerateSlideLearningObject`.
-- [ ] Xây dựng component `SlidePlayer.vue`: Trình chiếu slide chuẩn Coursera, thanh tiến trình slide, chế độ toàn màn hình Fullscreen, hộp ghi chú giảng viên.
-- [ ] Hoàn thiện giao diện Sinh viên [**`StudentCourseView.vue`**](file:///d:/CMU/Capstone1/FLTS/frontend/src/views/StudentCourseView.vue) gồm 4 tab học tập: **[Quiz] | [Flashcard] | [Sơ đồ tư duy] | [Slide bài giảng]**.
+- [x] Xây dựng Endpoint sinh bộ Slide bài giảng kèm Speaker Notes tại `ai-service/main.py`.
+- [x] Xây dựng Job Laravel `GenerateSlideLearningObject`.
+- [x] Xây dựng component `SlidePlayer.vue`: trình chiếu, thanh tiến trình, phím mũi tên, Fullscreen API và ghi chú giảng viên.
+- [x] Hoàn thiện không gian Sinh viên với 4 nhóm học liệu: Quiz, Flashcard, Mindmap và Slide bài giảng.
 
 ### 📅 Tuần 4 (13/11 – 19/11/2026): Kiểm thử Tổng thể, Tối ưu & Chuẩn bị Báo cáo Capstone
-- [ ] Chạy toàn bộ regression test suites (PHPUnit > 45 tests, Pytest > 30 tests).
-- [ ] Kiểm tra tính toàn vẹn của ChromaDB: Giữ vững và mở rộng tập vector giáo trình.
+- [x] Chạy toàn bộ regression test suites: PHPUnit 47 tests / 314 assertions; Pytest 33 tests.
+- [x] Kiểm tra tính toàn vẹn ChromaDB sau build/E2E: vẫn 645 vectors; generation chỉ đọc vector.
 - [ ] Đóng gói kịch bản Demo hoàn chỉnh cho Hội đồng chấm đồ án: Nạp tài liệu nhanh → Tự động sinh Quiz, Flashcard, Mindmap, Slides → Sinh viên trải nghiệm học tập đa phương thức.
 - [ ] Cập nhật tài liệu kỹ thuật và hoàn thiện báo cáo luận văn tốt nghiệp Capstone.
 
@@ -219,3 +219,12 @@ PB25 / US-16 được User Story v1.1 xếp trong Sprint 3. Phase 1 của kế h
 - Một account hiện chỉ giữ một bearer token. Đăng nhập cùng tài khoản demo ở cửa sổ khác sẽ làm token cũ hết hiệu lực; đây là giới hạn xác thực hiện hữu, không phải lỗi generation.
 
 Chi tiết bằng chứng và lệnh tái kiểm tra: `docs/SPRINT_4_PHASE1_EVIDENCE.md`.
+
+## 8. Cập nhật thực thi Mindmap & Interactive Slides — 16/10/2026
+
+- PB26 / US-17 và PB27 / US-18 đã có vertical slice chạy xuyên suốt: Chroma retrieval → Gemini structured output → FastAPI authoritative citation mapping → Laravel background queue/version → Lecturer review/publish → Student viewer.
+- Hai API nội bộ mới: `POST /internal/v1/learning-objects/generate-mindmap` và `POST /internal/v1/learning-objects/generate-slides`. Public Laravel tương ứng là `POST /api/courses/{course}/learning-objects/mindmaps|slides` và chỉ course owner được gọi.
+- Mindmap lưu `{root, markdown}`; node ID và citation metadata do FastAPI sinh/map. Khi hiệu đính, Lecturer chỉ đổi label; Laravel giữ nguyên cấu trúc và citation. Slide lưu `{slides}`; Lecturer đổi title/bullet/speaker notes nhưng citation vẫn lấy từ snapshot trước.
+- Speaker notes là nội dung dành cho Lecturer: Student payload loại bỏ trường này tại backend, không chỉ ẩn nút trên Vue.
+- E2E thật tạo Mindmap ID 11 và Slide ID 12 trên Course 4/Document 5. Slide hoàn tất ở attempt 2. Mindmap gặp Gemini 503 tải cao và recursive JSON có `null`; sau khi giữ vòng đời SDK client và chuẩn hóa null child, attempt 4 hoàn tất với 4 node. Cả hai đã publish và xuất hiện trong Student workspace.
+- Evidence chi tiết nằm tại `docs/SPRINT_4_MINDMAP_SLIDES_EVIDENCE.md`. Hạng mục “đóng gói demo Hội đồng” và báo cáo luận văn vẫn chưa tự động coi là hoàn thành.

@@ -109,7 +109,7 @@ function navigateToTask(task) {
           >
             <div class="task-card__top">
               <span class="task-card__type">
-                {{ task.type === 'document_processing' ? 'Tài liệu' : task.type === 'flashcard_generation' ? 'Flashcard' : 'Quiz' }}
+                {{ task.type === 'document_processing' ? 'Tài liệu' : task.type === 'flashcard_generation' ? 'Flashcard' : task.type === 'mindmap_generation' ? 'Mindmap' : task.type === 'slide_generation' ? 'Slide' : 'Quiz' }}
               </span>
               <span class="task-card__time">
                 {{ formatTime(task.created_at) }}

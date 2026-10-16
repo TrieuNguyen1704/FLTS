@@ -13,6 +13,8 @@ const loading = ref(true)
 const error = ref('')
 const quizzes = computed(() => objects.value.filter((item) => item.type === 'quiz'))
 const flashcards = computed(() => objects.value.filter((item) => item.type === 'flashcard'))
+const mindmaps = computed(() => objects.value.filter((item) => item.type === 'mindmap'))
+const slides = computed(() => objects.value.filter((item) => item.type === 'slide'))
 
 async function load() {
   loading.value = true
@@ -43,8 +45,10 @@ onMounted(load)
         <h1>{{ course.name }}</h1>
         <p class="course-hero__desc">{{ course.description || 'Học và ôn tập với các nội dung do giảng viên xuất bản.' }}</p>
         <div class="hero-stats">
-          <span class="hero-stat-badge">🎴 {{ flashcards.length }} bộ Flashcard</span>
-          <span class="hero-stat-badge">📝 {{ quizzes.length }} bài Quiz trắc nghiệm</span>
+          <span class="hero-stat-badge">{{ flashcards.length }} bộ Flashcard</span>
+          <span class="hero-stat-badge">{{ mindmaps.length }} Mindmap</span>
+          <span class="hero-stat-badge">{{ slides.length }} bài giảng</span>
+          <span class="hero-stat-badge">{{ quizzes.length }} bài Quiz</span>
         </div>
       </div>
       <div v-if="course.lecturer" class="course-hero__meta">
@@ -53,6 +57,30 @@ onMounted(load)
           <strong>{{ course.lecturer.name }}</strong>
         </div>
       </div>
+    </section>
+
+    <section class="content-section">
+      <header class="section-header"><div><h2>Sơ đồ tư duy Mindmap</h2><p>Khám phá mối liên hệ giữa các khái niệm bằng sơ đồ có thể thu phóng và gấp mở.</p></div><span class="count-chip">{{ mindmaps.length }} sơ đồ</span></header>
+      <div v-if="mindmaps.length" class="learning-object-grid">
+        <article v-for="object in mindmaps" :key="object.id" class="learning-card">
+          <div class="learning-card__header"><span class="type-badge type-badge--mindmap">Mindmap</span><span class="object-spec">{{ object.total_nodes }} nút · Bản {{ object.current_version }}</span></div>
+          <h3>{{ object.title }}</h3><p>{{ object.description || 'Sơ đồ hệ thống hóa các khái niệm trọng tâm.' }}</p>
+          <RouterLink class="button button--full" :to="{ name: 'student-mindmap', params: { courseId: course.id, objectId: object.id } }">Khám phá sơ đồ →</RouterLink>
+        </article>
+      </div>
+      <AppState v-else title="Chưa có Mindmap" message="Giảng viên chưa xuất bản sơ đồ tư duy cho khóa học này." />
+    </section>
+
+    <section class="content-section">
+      <header class="section-header"><div><h2>Slide bài giảng tương tác</h2><p>Xem trước nội dung trọng tâm và công thức trước giờ học trên lớp.</p></div><span class="count-chip">{{ slides.length }} bài</span></header>
+      <div v-if="slides.length" class="learning-object-grid">
+        <article v-for="object in slides" :key="object.id" class="learning-card">
+          <div class="learning-card__header"><span class="type-badge type-badge--slide">Slide</span><span class="object-spec">{{ object.total_slides }} trang · Bản {{ object.current_version }}</span></div>
+          <h3>{{ object.title }}</h3><p>{{ object.description || 'Bài giảng tóm lược nội dung trọng tâm.' }}</p>
+          <RouterLink class="button button--full" :to="{ name: 'student-slides', params: { courseId: course.id, objectId: object.id } }">Mở bài giảng →</RouterLink>
+        </article>
+      </div>
+      <AppState v-else title="Chưa có bài giảng" message="Giảng viên chưa xuất bản Slide cho khóa học này." />
     </section>
 
     <!-- SECTION 1: FLASHCARD ÔN TẬP -->
@@ -144,6 +172,8 @@ onMounted(load)
   color: var(--cds-blue-primary);
   border: 1px solid #bfdbfe;
 }
+.type-badge--mindmap { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; }
+.type-badge--slide { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
 .object-spec { color: var(--cds-text-secondary); font-size: .76rem; }
 .learning-card h3 { margin: 0 0 8px; font-size: 1.05rem; color: var(--cds-text-primary); }
 .learning-card p { flex: 1; margin: 0 0 16px; color: var(--cds-text-secondary); font-size: .85rem; line-height: 1.5; }

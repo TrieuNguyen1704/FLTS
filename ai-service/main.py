@@ -246,6 +246,81 @@ class FlashcardOutput(BaseModel):
     cards: list[FlashcardCardOutput]
 
 
+class MindmapGenerationRequest(BaseModel):
+    course_id: int
+    topic: str = Field(min_length=3, max_length=500)
+    difficulty: Literal['easy', 'medium', 'hard'] = 'medium'
+    depth: int = Field(default=3, ge=2, le=4)
+    document_ids: list[int] = Field(default_factory=list)
+    top_k: int = Field(default=10, ge=3, le=15)
+    max_pages: int = Field(default=5, ge=1, le=10)
+
+
+class MindmapDraftNode(BaseModel):
+    label: str = Field(min_length=1, max_length=500)
+    citation_indexes: list[int] = Field(min_length=1)
+    children: list['MindmapDraftNode'] = Field(default_factory=list, max_length=8)
+
+
+class MindmapDraft(BaseModel):
+    title: str = Field(min_length=3, max_length=255)
+    description: str = Field(default='', max_length=2000)
+    root: MindmapDraftNode
+
+
+class MindmapNode(BaseModel):
+    id: str
+    label: str
+    citations: list[QuizCitation]
+    children: list['MindmapNode'] = Field(default_factory=list)
+
+
+class MindmapPayload(BaseModel):
+    title: str
+    description: str
+    root: MindmapNode
+    markdown: str
+
+
+class SlideGenerationRequest(BaseModel):
+    course_id: int
+    topic: str = Field(min_length=3, max_length=500)
+    difficulty: Literal['easy', 'medium', 'hard'] = 'medium'
+    slide_count: int = Field(default=6, ge=5, le=10)
+    document_ids: list[int] = Field(default_factory=list)
+    top_k: int = Field(default=10, ge=3, le=15)
+    max_pages: int = Field(default=5, ge=1, le=10)
+
+
+class SlideDraftItem(BaseModel):
+    title: str = Field(min_length=1, max_length=500)
+    layout: Literal['title', 'bullet_points', 'summary'] = 'bullet_points'
+    bullet_points: list[str] = Field(min_length=3, max_length=5)
+    speaker_notes: str = Field(min_length=1, max_length=4000)
+    citation_indexes: list[int] = Field(min_length=1)
+
+
+class SlideDraft(BaseModel):
+    title: str = Field(min_length=3, max_length=255)
+    description: str = Field(default='', max_length=2000)
+    slides: list[SlideDraftItem] = Field(min_length=5, max_length=10)
+
+
+class SlideItem(BaseModel):
+    slide_number: int
+    title: str
+    layout: Literal['title', 'bullet_points', 'summary']
+    bullet_points: list[str]
+    speaker_notes: str
+    citations: list[QuizCitation]
+
+
+class SlidePayload(BaseModel):
+    title: str
+    description: str
+    slides: list[SlideItem]
+
+
 def redact_sensitive_text(value: str) -> str:
     return re.sub(r'(?i)\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b', '[redacted-email]', value)
 
@@ -481,6 +556,45 @@ def limit_matches_to_source_pages(matches: list[dict[str, Any]], max_pages: int)
     return selected
 
 
+def authoritative_citations(indexes: list[int], matches: list[dict[str, Any]], object_name: str) -> list[QuizCitation]:
+    """Map provider indexes to trusted retrieval metadata; provider-supplied source metadata is never persisted."""
+    if any(index < 1 or index > len(matches) for index in indexes):
+        raise PipelineError('UNGROUNDABLE_CITATION', f'Gemini returned a {object_name} citation outside the retrieved source set.', 'generation', 502)
+    return [QuizCitation(
+        vector_id=matches[index - 1]['vector_id'],
+        source_locator=matches[index - 1]['source_locator'],
+        document_id=matches[index - 1]['document_id'],
+        document_name=matches[index - 1]['document_name'],
+    ) for index in dict.fromkeys(indexes)]
+
+
+def normalize_mindmap_node(node: MindmapDraftNode, matches: list[dict[str, Any]], path: list[int], max_depth: int) -> MindmapNode:
+    if len(path) > max_depth:
+        raise PipelineError('MINDMAP_SCHEMA_INVALID', 'Gemini returned a mindmap deeper than requested.', 'generation', 502)
+    node_id = 'root' if not path else 'node_' + '_'.join(str(value) for value in path)
+    return MindmapNode(
+        id=node_id,
+        label=node.label.strip(),
+        citations=authoritative_citations(node.citation_indexes, matches, 'mindmap'),
+        children=[normalize_mindmap_node(child, matches, [*path, index], max_depth) for index, child in enumerate(node.children, start=1)],
+    )
+
+
+def mindmap_markdown(node: MindmapNode, level: int = 1) -> list[str]:
+    lines = [f'{"#" * min(level, 6)} {node.label}']
+    for child in node.children:
+        lines.extend(mindmap_markdown(child, level + 1))
+    return lines
+
+
+def clean_mindmap_draft_node(node: dict[str, Any]) -> dict[str, Any]:
+    """Gemini may emit null placeholders for recursive array slots; they carry no content and are safely removed."""
+    cleaned = dict(node)
+    children = cleaned.get('children') or []
+    cleaned['children'] = [clean_mindmap_draft_node(child) for child in children if isinstance(child, dict)]
+    return cleaned
+
+
 @APP.post('/internal/v1/learning-objects/generate-flashcards', dependencies=[Depends(require_service_token)])
 def generate_flashcards(request: FlashcardGenerationRequest) -> dict[str, Any]:
     retrieved = search_collection(SearchRequest(
@@ -559,6 +673,116 @@ def generate_flashcards(request: FlashcardGenerationRequest) -> dict[str, Any]:
             'embedding_model': retrieved['embedding_model'],
             'collection': retrieved['collection'],
         },
+        'generation_model': GENERATION_MODEL,
+    }
+
+
+@APP.post('/internal/v1/learning-objects/generate-mindmap', dependencies=[Depends(require_service_token)])
+def generate_mindmap(request: MindmapGenerationRequest) -> dict[str, Any]:
+    retrieved = search_collection(SearchRequest(
+        course_id=request.course_id, query=request.topic, top_k=request.top_k, document_ids=request.document_ids,
+    ))
+    matches = limit_matches_to_source_pages(retrieved['matches'], request.max_pages)
+    if not matches:
+        raise PipelineError('NO_GROUNDED_CONTEXT', 'No processed chunks matched this mindmap topic.', 'generation', 422)
+    context = '\n\n'.join(f'[Source {index}] {match["content"]}' for index, match in enumerate(matches, start=1))
+    instruction = (
+        'Create a Vietnamese hierarchical knowledge mindmap using only the numbered source chunks below.\n'
+        f'- Topic: {request.topic} | Difficulty: {request.difficulty} | Maximum tree depth: {request.depth}\n'
+        f'- Context is limited to at most {request.max_pages} distinct source pages or locators.\n\n'
+        'REQUIREMENTS:\n'
+        '1. Return one meaningful root, 2-6 main branches, and concise child nodes. Never exceed the requested depth.\n'
+        '2. Every node must include valid citation_indexes referencing its supporting [Source] numbers.\n'
+        '3. Do not return node IDs or source metadata; the server assigns authoritative IDs and citations.\n'
+        '4. Correct malformed notation and wrap mathematical expressions in standard LaTeX $...$ or $$...$$.\n'
+        '5. Avoid duplicate branches and do not add facts absent from the context.\n\n'
+        f'Source chunks:\n{context}'
+    )
+    try:
+        client = gemini_client()
+        response = client.models.generate_content(
+            model=GENERATION_MODEL,
+            contents=instruction,
+            config=types.GenerateContentConfig(response_mime_type='application/json', response_schema=MindmapDraft.model_json_schema()),
+        )
+        raw_draft = json.loads(response.text)
+        raw_draft['root'] = clean_mindmap_draft_node(raw_draft['root'])
+        draft = MindmapDraft.model_validate(raw_draft)
+    except PipelineError:
+        raise
+    except Exception as exc:
+        LOGGER.exception('Gemini mindmap-generation request failed')
+        if is_rate_limited(exc):
+            raise PipelineError('GEMINI_RATE_LIMITED', 'Gemini is temporarily rate limited. Please retry shortly.', 'generation', 429) from exc
+        raise PipelineError('MINDMAP_GENERATION_FAILED', 'Gemini could not generate a valid mindmap.', 'generation', 502) from exc
+
+    root = normalize_mindmap_node(draft.root, matches, [], request.depth)
+    if len(root.children) < 2:
+        raise PipelineError('MINDMAP_SCHEMA_INVALID', 'Gemini returned too few main mindmap branches.', 'generation', 502)
+    payload = MindmapPayload(
+        title=draft.title, description=draft.description, root=root,
+        markdown='\n'.join(mindmap_markdown(root)),
+    )
+    return {
+        'mindmap': payload.model_dump(),
+        'retrieval': {'query': retrieved['query'], 'match_count': len(matches), 'max_pages': request.max_pages,
+                      'embedding_model': retrieved['embedding_model'], 'collection': retrieved['collection']},
+        'generation_model': GENERATION_MODEL,
+    }
+
+
+@APP.post('/internal/v1/learning-objects/generate-slides', dependencies=[Depends(require_service_token)])
+def generate_slides(request: SlideGenerationRequest) -> dict[str, Any]:
+    retrieved = search_collection(SearchRequest(
+        course_id=request.course_id, query=request.topic, top_k=request.top_k, document_ids=request.document_ids,
+    ))
+    matches = limit_matches_to_source_pages(retrieved['matches'], request.max_pages)
+    if not matches:
+        raise PipelineError('NO_GROUNDED_CONTEXT', 'No processed chunks matched this slide topic.', 'generation', 422)
+    context = '\n\n'.join(f'[Source {index}] {match["content"]}' for index, match in enumerate(matches, start=1))
+    instruction = (
+        'Create a Vietnamese interactive lecture slide deck using only the numbered source chunks below.\n'
+        f'- Topic: {request.topic} | Difficulty: {request.difficulty} | Slide count: {request.slide_count}\n'
+        f'- Context is limited to at most {request.max_pages} distinct source pages or locators.\n\n'
+        'REQUIREMENTS:\n'
+        '1. Return exactly the requested number of slides in a coherent teaching sequence.\n'
+        '2. Each slide has a concise title, 3-5 concise bullet_points, practical speaker_notes, and valid citation_indexes.\n'
+        '3. Use title for the opening slide, summary for the final slide, and bullet_points for the remaining slides.\n'
+        '4. Do not return source metadata; the server maps citation_indexes to authoritative retrieval metadata.\n'
+        '5. Correct malformed notation and wrap mathematical expressions in standard LaTeX $...$ or $$...$$.\n'
+        '6. Do not add facts absent from the context.\n\n'
+        f'Source chunks:\n{context}'
+    )
+    try:
+        client = gemini_client()
+        response = client.models.generate_content(
+            model=GENERATION_MODEL,
+            contents=instruction,
+            config=types.GenerateContentConfig(response_mime_type='application/json', response_schema=SlideDraft.model_json_schema()),
+        )
+        draft = SlideDraft.model_validate(json.loads(response.text))
+    except PipelineError:
+        raise
+    except Exception as exc:
+        LOGGER.exception('Gemini slide-generation request failed')
+        if is_rate_limited(exc):
+            raise PipelineError('GEMINI_RATE_LIMITED', 'Gemini is temporarily rate limited. Please retry shortly.', 'generation', 429) from exc
+        raise PipelineError('SLIDE_GENERATION_FAILED', 'Gemini could not generate valid slides.', 'generation', 502) from exc
+
+    if len(draft.slides) != request.slide_count:
+        raise PipelineError('SLIDE_SCHEMA_INVALID', 'Gemini returned a different number of slides than requested.', 'generation', 502)
+    slides = [SlideItem(
+        slide_number=index,
+        title=slide.title.strip(), layout=slide.layout,
+        bullet_points=[point.strip() for point in slide.bullet_points],
+        speaker_notes=slide.speaker_notes.strip(),
+        citations=authoritative_citations(slide.citation_indexes, matches, 'slide'),
+    ) for index, slide in enumerate(draft.slides, start=1)]
+    payload = SlidePayload(title=draft.title, description=draft.description, slides=slides)
+    return {
+        'slides': payload.model_dump(),
+        'retrieval': {'query': retrieved['query'], 'match_count': len(matches), 'max_pages': request.max_pages,
+                      'embedding_model': retrieved['embedding_model'], 'collection': retrieved['collection']},
         'generation_model': GENERATION_MODEL,
     }
 

@@ -241,3 +241,13 @@ Frontend giảng viên dùng `FlashcardEditorView.vue`; phía Student dùng `Stu
 `max_pages` không cắt file gốc hay xóa vector. FastAPI retrieve Top-K, sau đó giới hạn context theo số source locator/page duy nhất trước khi gửi Gemini để giảm latency/quota. Citation từ model chỉ là index; server mới map index đó về `vector_id`, `document_id`, `document_name`, `source_locator`, tránh model tự bịa nguồn.
 
 Test trọng tâm: `SprintFourFlashcardApiTest.php` và `test_flashcard_generation.py`. Evidence runtime: `docs/SPRINT_4_PHASE1_EVIDENCE.md`.
+
+## 18. Đường đọc code Sprint 4 — Mindmap và Interactive Slides (16/10/2026)
+
+Đọc luồng tạo theo thứ tự: `LearningObjectsView.vue` → `learningObjectService.js` → `routes/api.php` → `LearningObjectController@storeMindmap/storeSlides` → `GenerateMindmapLearningObject` hoặc `GenerateSlideLearningObject` → `RagService::generateMindmap/generateSlides` → FastAPI `generate_mindmap/generate_slides` → Chroma retrieval → Gemini structured JSON → `learning_object_versions.content_payload`.
+
+Mindmap không có bảng riêng: snapshot JSON chứa `root` và `markdown`. FastAPI tạo ID ổn định (`root`, `node_1`, `node_1_1`) và map citation index sang metadata Chroma. `MindmapEditorView.vue` dùng `MindmapNodeEditor.vue` để sửa label; backend `mergeMindmapLabels()` giữ cấu trúc và citation của snapshot cũ. `MindmapViewer.vue` tự bố trí cây SVG, dùng `foreignObject` + `MathText.vue`, hỗ trợ zoom/pan/fold và xem nguồn nút.
+
+Slide cũng không có bảng riêng: snapshot JSON chứa mảng `slides`. `SlideEditorView.vue` cho sửa title, layout, bullets và speaker notes; controller giữ citation cũ. `SlidePlayer.vue` hỗ trợ nút/phím mũi tên, tiến trình, fullscreen và notes. `detail(..., studentView: true)` xóa `speaker_notes` khỏi response, nên đây là kiểm soát backend chứ không phải ẩn UI.
+
+RBAC giống Quiz/Flashcard: owner Lecturer mới được generate/edit/publish/archive; Student phải enrolled và chỉ thấy published. Test trọng tâm là `SprintFourMindmapSlideApiTest.php`, `test_mindmap_generation.py`, `test_slide_generation.py`; runtime evidence ở `docs/SPRINT_4_MINDMAP_SLIDES_EVIDENCE.md`.
